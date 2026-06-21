@@ -97,25 +97,25 @@ const TopCard = ({
   trendPositive?: boolean;
 }) => {
   return (
-    <div className="bg-white rounded-[28px] p-[28px] flex flex-col justify-between h-[210px] shadow-[0_4px_30px_rgba(35,14,216,0.04)] relative overflow-hidden">
+    <div className="bg-white rounded-[26px] p-[26px] flex flex-col h-[200px] shadow-[0_4px_30px_rgba(35,14,216,0.04)] relative overflow-hidden">
       <div>
-        <Icon size={24} strokeWidth={1.75} className={clsx("mb-[18px]", iconColor)} />
-        <h3 className="text-[#5e687b] font-semibold text-[17px] tracking-tight mb-2">{title}</h3>
-        <p className="text-[38px] font-bold text-[#1a1438] tracking-tight">{value}</p>
+        <Icon size={24} strokeWidth={1.75} className={clsx("mb-4", iconColor)} />
+        <h3 className="text-[#5e687b] font-semibold text-[16px] tracking-tight mb-1">{title}</h3>
+        <p className="text-[36px] font-bold text-[#1a1438] tracking-tight">{value}</p>
       </div>
 
-      <div className="flex flex-row items-center gap-3 pt-1 text-[15px]">
-        <span className="text-[#8e98ab] font-medium tracking-tight text-[16px]">Last 30 days</span>
+      <div className="flex flex-row items-center gap-3 pt-1 mt-auto text-[15px]">
+        <span className="text-[#8e98ab] font-medium tracking-tight text-[15px]">Last 30 days</span>
         {trend && (
           <div
             className={clsx(
-              "px-[14px] py-[6px] rounded-full flex flex-row items-center font-bold text-[14px]",
+              "px-3 py-1.5 rounded-full flex flex-row items-center font-bold text-[13px]",
               trendPositive
                 ? "bg-[#e2f8ec] text-[#10b981]"
                 : "bg-[#ffeef0] text-[#f43f5e]"
             )}
           >
-            <span className="mr-1 text-[14px]">{trendPositive ? "↑" : "↓"}</span> {trend}
+            <span className="mr-1 text-[13px]">{trendPositive ? "↑" : "↓"}</span> {trend}
           </div>
         )}
       </div>
@@ -185,9 +185,9 @@ export default function AppDashboard() {
             <h1 className="text-[32px] font-bold text-[#1e1b4b] tracking-tight">Overview</h1>
           </div>
 
-          <div className="flex-1 overflow-y-auto bg-[#f0f4fc] rounded-tl-[2.5rem] px-[44px] py-[44px]">
+          <div className="flex-1 overflow-y-auto scrollbar-hide bg-[#f0f4fc] rounded-tl-[2.5rem] px-[44px] py-[34px]">
             {/* Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[26px] mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
             <TopCard
               icon={Users}
               iconColor="text-[#702bf0]"
