@@ -1,0 +1,6 @@
+{
+  "name": "Panze Studio Dashboard",
+  "description": "A beautiful POS/overview dashboard replica.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
