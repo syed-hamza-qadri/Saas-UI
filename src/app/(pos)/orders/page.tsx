@@ -3,14 +3,18 @@
 import React, { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { LogOut } from "lucide-react";
+import { useUser } from "@/lib/hooks/useUser";
 import {
   LayoutGrid, ShoppingCart, Receipt, Package, Users,
-  BarChart2, Settings, ChevronRight, Search, Eye,
+  BarChart2, Settings, ChevronRight, Search, Eye, RotateCcw, XCircle,
 } from "lucide-react";
 import clsx from "clsx";
 import { formatCurrency } from "@/lib/utils/currency";
+import { useOrders, useOrderItems, useUpdateOrderStatus } from "@/lib/hooks/useOrders";
 
-// --- Sidebar ---
 const SidebarItem = ({ icon: Icon, label, active = false, href }: { icon: LucideIcon; label: string; active?: boolean; href: string }) => (
   <Link href={href}>
     <div className={clsx(
@@ -26,31 +30,7 @@ const SidebarItem = ({ icon: Icon, label, active = false, href }: { icon: Lucide
   </Link>
 );
 
-// --- Mock Data ---
 type OrderStatus = "completed" | "pending" | "refunded" | "voided";
-type PaymentMethod = "cash" | "card" | "bank_transfer";
-
-interface MockOrder {
-  id: string;
-  order_number: string;
-  customer: string;
-  items: number;
-  total: number;
-  payment: PaymentMethod;
-  status: OrderStatus;
-  date: string;
-}
-
-const MOCK_ORDERS: MockOrder[] = [
-  { id: "1", order_number: "ORD-001", customer: "Ahmed Khan", items: 4, total: 1250, payment: "cash", status: "completed", date: "21 Jun 2026, 10:30" },
-  { id: "2", order_number: "ORD-002", customer: "Sara Ali", items: 2, total: 480, payment: "card", status: "completed", date: "21 Jun 2026, 10:45" },
-  { id: "3", order_number: "ORD-003", customer: "Walk-in", items: 6, total: 2100, payment: "cash", status: "pending", date: "21 Jun 2026, 11:00" },
-  { id: "4", order_number: "ORD-004", customer: "Bilal Raza", items: 1, total: 350, payment: "card", status: "completed", date: "21 Jun 2026, 11:20" },
-  { id: "5", order_number: "ORD-005", customer: "Fatima Malik", items: 3, total: 890, payment: "bank_transfer", status: "refunded", date: "21 Jun 2026, 11:45" },
-  { id: "6", order_number: "ORD-006", customer: "Walk-in", items: 5, total: 1670, payment: "cash", status: "completed", date: "21 Jun 2026, 12:00" },
-  { id: "7", order_number: "ORD-007", customer: "Usman Tariq", items: 2, total: 560, payment: "card", status: "voided", date: "21 Jun 2026, 12:30" },
-  { id: "8", order_number: "ORD-008", customer: "Ayesha Siddiqui", items: 7, total: 3240, payment: "bank_transfer", status: "completed", date: "21 Jun 2026, 13:00" },
-];
 
 const STATUS_STYLES: Record<OrderStatus, string> = {
   completed: "bg-emerald-50 text-emerald-700",
@@ -65,11 +45,24 @@ export default function OrdersPage() {
   const [activeFilter, setActiveFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredOrders = MOCK_ORDERS.filter((order) => {
+  const { data: user } = useUser();
+  const router = useRouter();
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
+
+  const { data: orders = [], isLoading } = useOrders();
+  const updateStatus = useUpdateOrderStatus();
+  const [viewOrder, setViewOrder] = useState<typeof orders[0] | null>(null);
+  const [actionConfirm, setActionConfirm] = useState<{ id: string; action: "voided" | "refunded" } | null>(null);
+  const { data: orderItems = [], isLoading: itemsLoading } = useOrderItems(viewOrder?.id ?? null);
+
+  const filteredOrders = orders.filter((order) => {
     const matchesFilter = activeFilter === "All" || order.status === activeFilter.toLowerCase();
-    const matchesSearch =
-      order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = order.order_number.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
@@ -92,6 +85,19 @@ export default function OrdersPage() {
             <SidebarItem icon={BarChart2} label="Reports" href="/reports" />
             <SidebarItem icon={Settings} label="Settings" href="/settings" />
           </div>
+          <div className="mt-auto pt-4 border-t border-slate-100 mx-2">
+            <div className="flex items-center gap-3 px-3 py-2 rounded-[16px] bg-[#f8f7ff]">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#702bf0] to-[#511ae8] flex items-center justify-center shrink-0">
+                <span className="text-white text-[12px] font-bold">
+                  {user?.email?.charAt(0).toUpperCase() ?? "A"}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-semibold text-slate-700 truncate">Admin</p>
+                <p className="text-[11px] text-slate-400 truncate">{user?.email ?? ""}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Main Content */}
@@ -99,84 +105,102 @@ export default function OrdersPage() {
           <div className="px-[44px] pt-[44px] pb-[34px] shrink-0">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-[28px] font-bold text-[#1e1b4b] tracking-tight">Orders</h1>
-              <div className="relative">
-                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search orders..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-[14px] pl-10 pr-4 py-2.5 text-[14px] focus:outline-none focus:border-[#702bf0] shadow-sm w-[240px]"
-                />
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search orders..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-[14px] pl-10 pr-4 py-2.5 text-[14px] focus:outline-none focus:border-[#702bf0] shadow-sm w-[240px]"
+                  />
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold"
+                >
+                  <LogOut size={16} />
+                  Logout
+                </button>
               </div>
             </div>
-
-            {/* Filter Tabs */}
             <div className="flex gap-2">
               {FILTER_TABS.map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveFilter(tab)}
-                  className={clsx(
-                    "px-5 py-2 rounded-[12px] text-[13px] font-semibold transition-all",
-                    activeFilter === tab
-                      ? "bg-[#702bf0] text-white shadow-sm"
-                      : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200"
-                  )}
-                >
+                <button key={tab} onClick={() => setActiveFilter(tab)}
+                  className={clsx("px-5 py-2 rounded-[12px] text-[13px] font-semibold transition-all",
+                    activeFilter === tab ? "bg-[#702bf0] text-white shadow-sm" : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200"
+                  )}>
                   {tab}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Table */}
           <div className="flex-1 overflow-y-auto scrollbar-hide bg-[#f0f4fc] rounded-tl-[2.5rem] px-[44px] py-[34px]">
             <div className="bg-white rounded-[24px] shadow-sm overflow-hidden border border-slate-100">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Order #</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Customer</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Items</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Total</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Payment</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Status</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Date</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredOrders.map((order, index) => (
-                    <tr
-                      key={order.id}
-                      className={clsx(
-                        "border-b border-slate-50 hover:bg-[#f8f7ff] transition-colors",
-                        index === filteredOrders.length - 1 && "border-b-0"
-                      )}
-                    >
-                      <td className="px-6 py-4 text-[13px] font-bold text-[#702bf0]">{order.order_number}</td>
-                      <td className="px-6 py-4 text-[13px] font-medium text-slate-700">{order.customer}</td>
-                      <td className="px-6 py-4 text-[13px] text-slate-500">{order.items} items</td>
-                      <td className="px-6 py-4 text-[13px] font-semibold text-slate-700">{formatCurrency(order.total)}</td>
-                      <td className="px-6 py-4 text-[13px] text-slate-500 capitalize">{order.payment.replace("_", " ")}</td>
-                      <td className="px-6 py-4">
-                        <span className={clsx("px-3 py-1 rounded-full text-[12px] font-semibold capitalize", STATUS_STYLES[order.status])}>
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-[13px] text-slate-400">{order.date}</td>
-                      <td className="px-6 py-4">
-                        <button className="w-8 h-8 rounded-[10px] bg-[#f0f4fc] flex items-center justify-center hover:bg-[#e8e2ff] transition-colors">
-                          <Eye size={15} className="text-[#702bf0]" />
-                        </button>
-                      </td>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="w-8 h-8 border-2 border-[#702bf0] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Order #</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Subtotal</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Tax</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Total</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Payment</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Status</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Date</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {filteredOrders.length === 0 && (
+                  </thead>
+                  <tbody>
+                    {filteredOrders.map((order, index) => {
+                      const status = order.status as OrderStatus;
+                      return (
+                        <tr key={order.id} className={clsx("border-b border-slate-50 hover:bg-[#f8f7ff] transition-colors", index === filteredOrders.length - 1 && "border-b-0")}>
+                          <td className="px-6 py-4 text-[13px] font-bold text-[#702bf0]">#{order.order_number.slice(-4)}</td>
+                          <td className="px-6 py-4 text-[13px] text-slate-600">{order.subtotal.toLocaleString("en-PK")}</td>
+                          <td className="px-6 py-4 text-[13px] text-slate-500">{order.tax.toLocaleString("en-PK")}</td>
+                          <td className="px-6 py-4 text-[13px] font-semibold text-slate-700">{order.total.toLocaleString("en-PK")}</td>
+                          <td className="px-6 py-4 text-[13px] text-slate-500 capitalize">{order.payment_method.replace("_", " ")}</td>
+                          <td className="px-6 py-4">
+                            <span className={clsx("px-3 py-1 rounded-full text-[12px] font-semibold capitalize", STATUS_STYLES[status])}>
+                              {order.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-[13px] text-slate-400 whitespace-nowrap">
+                            {new Date(order.created_at).toLocaleString("en-PK", { dateStyle: "medium", timeStyle: "short" })}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => setViewOrder(order)} className="w-8 h-8 rounded-[10px] bg-[#f0f4fc] flex items-center justify-center hover:bg-[#e8e2ff] transition-colors">
+                                <Eye size={15} className="text-[#702bf0]" />
+                              </button>
+                              {order.status === "completed" && (
+                                <>
+                                  <button onClick={() => setActionConfirm({ id: order.id, action: "refunded" })}
+                                    className="w-8 h-8 rounded-[10px] bg-blue-50 flex items-center justify-center hover:bg-blue-100 transition-colors" title="Refund">
+                                    <RotateCcw size={14} className="text-blue-500" />
+                                  </button>
+                                  <button onClick={() => setActionConfirm({ id: order.id, action: "voided" })}
+                                    className="w-8 h-8 rounded-[10px] bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors" title="Void">
+                                    <XCircle size={14} className="text-red-500" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+              {!isLoading && filteredOrders.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 text-slate-300">
                   <Receipt size={40} className="mb-3 opacity-30" />
                   <p className="text-sm font-medium">No orders found</p>
@@ -186,6 +210,103 @@ export default function OrdersPage() {
           </div>
         </div>
       </div>
+      {viewOrder && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[24px] p-8 w-full max-w-sm shadow-2xl">
+            <div className="text-center mb-4">
+              <h2 className="text-[20px] font-bold text-[#1e1b4b]">POS System</h2>
+              <p className="text-slate-400 text-sm">Order Receipt</p>
+              <p className="text-slate-500 text-xs mt-1">#{viewOrder.order_number.slice(-4)}</p>
+              <p className="text-slate-400 text-xs">{new Date(viewOrder.created_at).toLocaleString("en-PK")}</p>
+            </div>
+            <div className="border-t border-dashed border-slate-200 mb-4" />
+            {itemsLoading ? (
+              <div className="flex justify-center py-4">
+                <div className="w-5 h-5 border-2 border-[#702bf0] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="mb-4 space-y-2">
+                {orderItems.map((item) => (
+                  <div key={item.id} className="flex justify-between items-center">
+                    <div>
+                      <p className="text-[13px] font-medium text-slate-700">{item.product_name}</p>
+                      <p className="text-[11px] text-slate-400">{item.quantity} x PKR {Number(item.unit_price).toLocaleString("en-PK")}</p>
+                    </div>
+                    <p className="text-[13px] font-semibold text-slate-700">PKR {Number(item.subtotal).toLocaleString("en-PK")}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="border-t border-dashed border-slate-200 mb-4" />
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between text-sm text-slate-500">
+                <span>Subtotal</span><span>PKR {viewOrder.subtotal.toLocaleString("en-PK")}</span>
+              </div>
+              {viewOrder.discount > 0 && (
+                <div className="flex justify-between text-sm text-emerald-600">
+                  <span>Discount</span><span>- PKR {viewOrder.discount.toLocaleString("en-PK")}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm text-slate-500">
+                <span>GST (17%)</span><span>PKR {viewOrder.tax.toLocaleString("en-PK")}</span>
+              </div>
+              <div className="flex justify-between font-bold text-[#1e1b4b] text-[15px] pt-2 border-t border-slate-100">
+                <span>Total</span><span>PKR {viewOrder.total.toLocaleString("en-PK")}</span>
+              </div>
+              <div className="flex justify-between text-sm text-slate-500">
+                <span>Payment</span><span className="capitalize">{viewOrder.payment_method.replace("_", " ")}</span>
+              </div>
+              <div className="flex justify-between text-sm text-slate-500">
+                <span>Status</span>
+                <span className={clsx("px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize", STATUS_STYLES[viewOrder.status as OrderStatus])}>
+                  {viewOrder.status}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => window.print()} className="flex-1 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-3 rounded-[14px] font-bold text-sm hover:opacity-90">Print</button>
+              <button onClick={() => setViewOrder(null)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {actionConfirm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[24px] p-8 w-full max-w-sm shadow-2xl">
+            <div className={clsx("flex items-center justify-center w-14 h-14 rounded-full mx-auto mb-4",
+              actionConfirm.action === "voided" ? "bg-red-50" : "bg-blue-50"
+            )}>
+              {actionConfirm.action === "voided"
+                ? <XCircle size={24} className="text-red-500" />
+                : <RotateCcw size={24} className="text-blue-500" />
+              }
+            </div>
+            <h2 className="text-[18px] font-bold text-[#1e1b4b] text-center mb-2 capitalize">
+              {actionConfirm.action === "voided" ? "Void Order?" : "Refund Order?"}
+            </h2>
+            <p className="text-[13px] text-slate-400 text-center mb-6">
+              Stock will be restored automatically. This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setActionConfirm(null)}
+                className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200">
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await updateStatus.mutateAsync({ id: actionConfirm.id, status: actionConfirm.action });
+                  setActionConfirm(null);
+                }}
+                disabled={updateStatus.isPending}
+                className={clsx("flex-1 text-white py-3 rounded-[14px] font-bold text-sm disabled:opacity-50",
+                  actionConfirm.action === "voided" ? "bg-red-500 hover:bg-red-600" : "bg-blue-500 hover:bg-blue-600"
+                )}>
+                {updateStatus.isPending ? "Processing..." : actionConfirm.action === "voided" ? "Void Order" : "Refund Order"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,11 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { useUser } from "@/lib/hooks/useUser";
 import {
   LayoutGrid,
   Users,
@@ -13,6 +16,7 @@ import {
   BarChart2,
   Settings,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
 import {
   BarChart,
@@ -27,17 +31,11 @@ import {
   Line,
 } from "recharts";
 import clsx from "clsx";
+import { useDashboardStats } from "@/lib/hooks/useDashboard";
+import { formatCurrency } from "@/lib/utils/currency";
+import { useAppSettings } from "@/components/providers/settings-provider";
 
 // --- Data ---
-const barData = [
-  { name: "Feb", sales: 125000 },
-  { name: "Mar", sales: 198000 },
-  { name: "Apr", sales: 143000 },
-  { name: "May", sales: 167000 },
-  { name: "Jun", sales: 89000 },
-  { name: "Jul", sales: 210000 },
-];
-
 const lineData = [
   { name: "Mon", cash: 45000, card: 32000, transfer: 18000 },
   { name: "Tue", cash: 38000, card: 41000, transfer: 22000 },
@@ -107,12 +105,13 @@ const TopCard = ({
 };
 
 const CustomBarTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ value: number }> }) => {
+  const appSettings = useAppSettings();
   if (active && payload && payload.length) {
     return (
       <div className="relative z-50">
         <div className="bg-[#1e1b4b] text-white text-[13px] p-3 rounded-xl shadow-xl min-w-[160px]">
           <p className="mb-1 text-slate-200">
-            Sales: <span className="text-white font-semibold">PKR {payload[0].value.toLocaleString("en-PK")}</span>
+            Sales: <span className="text-white font-semibold">{appSettings.currency} {payload[0].value.toLocaleString("en-PK")}</span>
           </p>
           <p className="text-emerald-400 font-medium">↑ vs last month</p>
         </div>
@@ -126,7 +125,29 @@ const CustomBarTooltip = ({ active, payload }: { active?: boolean; payload?: Arr
 // --- Page Layout ---
 
 export default function AppDashboard() {
-  const formatSalesTooltip = (value: unknown) => [`PKR ${Number(value ?? 0).toLocaleString("en-PK")}`, "Sales"];
+  const appSettings = useAppSettings();
+  const formatSalesTooltip = (value: unknown) => [`${appSettings.currency} ${Number(value ?? 0).toLocaleString("en-PK")}`, "Sales"];
+
+  const router = useRouter();
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
+
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(appSettings.lowStockThreshold);
+  const { data: user } = useUser();
+
+  const barData = stats?.weeklyChartData ?? [
+    { name: "Sun", sales: 0 },
+    { name: "Mon", sales: 0 },
+    { name: "Tue", sales: 0 },
+    { name: "Wed", sales: 0 },
+    { name: "Thu", sales: 0 },
+    { name: "Fri", sales: 0 },
+    { name: "Sat", sales: 0 },
+  ];
 
   return (
     <div className="h-screen bg-gradient-to-br from-indigo-200 to-purple-300 flex items-center justify-center p-6 font-sans overflow-hidden">
@@ -152,12 +173,34 @@ export default function AppDashboard() {
             <SidebarItem icon={BarChart2} label="Reports" href="/reports" />
             <SidebarItem icon={Settings} label="Settings" href="/settings" />
           </div>
+
+          {/* User Profile */}
+          <div className="mt-auto pt-4 border-t border-slate-100 mx-2">
+            <div className="flex items-center gap-3 px-3 py-2 rounded-[16px] bg-[#f8f7ff]">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#702bf0] to-[#511ae8] flex items-center justify-center shrink-0">
+                <span className="text-white text-[12px] font-bold">
+                  {user?.email?.charAt(0).toUpperCase() ?? "A"}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-semibold text-slate-700 truncate">Admin</p>
+                <p className="text-[11px] text-slate-400 truncate">{user?.email ?? ""}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* --- Main Content --- */}
         <div className="flex-1 h-full flex flex-col relative z-0">
-          <div className="px-[44px] pt-[44px] pb-[34px] shrink-0">
+          <div className="px-[44px] pt-[44px] pb-[34px] shrink-0 flex items-center justify-between">
             <h1 className="text-[32px] font-bold text-[#1e1b4b] tracking-tight">Dashboard</h1>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold"
+            >
+              <LogOut size={16} />
+              Logout
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto scrollbar-hide bg-[#f0f4fc] rounded-tl-[2.5rem] px-[44px] py-[34px]">
@@ -167,24 +210,24 @@ export default function AppDashboard() {
               icon={ShoppingCart}
               iconColor="text-[#702bf0]"
               title="Today's Orders"
-              value="124"
-              trend="12.5%"
+              value={statsLoading ? "..." : String(stats?.todayOrderCount ?? 0)}
+              trend="vs yesterday"
               trendPositive={true}
             />
             <TopCard
               icon={CircleDollarSign}
               iconColor="text-[#702bf0]"
               title="Today's Revenue"
-              value="PKR 48,320"
-              trend="8.2%"
+              value={statsLoading ? "..." : formatCurrency(stats?.todayRevenue ?? 0)}
+              trend="vs yesterday"
               trendPositive={true}
             />
             <TopCard
               icon={Package}
               iconColor="text-[#702bf0]"
               title="Low Stock Items"
-              value="7"
-              trend="3 critical"
+              value={statsLoading ? "..." : String(stats?.lowStockCount ?? 0)}
+              trend="need restock"
               trendPositive={false}
             />
           </div>
@@ -193,14 +236,14 @@ export default function AppDashboard() {
             <div className="grid grid-cols-3 gap-6 mt-6">
 
               {/* Weekly Sales Index */}
-              <div className="col-span-2 bg-white rounded-[24px] p-6 shadow-sm border border-slate-100">
+              <div className="col-span-2 bg-white rounded-[24px] p-6 shadow-sm border border-slate-100 flex flex-col">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-[15px] font-bold text-[#1e1b4b]">Weekly Sales Index</h3>
                   <span className="text-[12px] text-slate-400 bg-slate-50 border border-slate-200 px-3 py-1 rounded-full font-medium">Current Week</span>
                 </div>
-                <div className="w-full" style={{ minHeight: 0, height: 180 }}>
+                <div className="flex-1 w-full" style={{ minHeight: 200 }}>
                   <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <BarChart data={barData} barSize={22}>
+                    <BarChart data={barData} barSize={28} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                       <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v / 1000}k`} />
@@ -225,23 +268,21 @@ export default function AppDashboard() {
                   </div>
                 </div>
                 <div className="space-y-3">
-                  {[
-                    { id: "TX-1001", items: 4, method: "Cash", amount: 1250, status: "Successful" },
-                    { id: "TX-1002", items: 2, method: "Card", amount: 480, status: "Successful" },
-                    { id: "TX-1003", items: 6, method: "Bank Transfer", amount: 2100, status: "Successful" },
-                    { id: "TX-1004", items: 1, method: "Cash", amount: 350, status: "Successful" },
-                  ].map((tx) => (
+                  {(stats?.recentOrders ?? []).map((tx) => (
                     <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-b-0">
                       <div>
-                        <p className="text-[13px] font-bold text-slate-700">{tx.id}</p>
-                        <p className="text-[12px] text-slate-400">{tx.items} items · {tx.method}</p>
+                        <p className="text-[13px] font-bold text-slate-700">#{tx.order_number.slice(-4)}</p>
+                        <p className="text-[12px] text-slate-400 capitalize">{tx.payment_method.replace("_", " ")}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[13px] font-bold text-[#702bf0]">PKR {tx.amount.toLocaleString("en-PK")}</p>
-                        <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{tx.status}</span>
+                        <p className="text-[13px] font-bold text-[#702bf0]">{formatCurrency(Number(tx.total))}</p>
+                        <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full capitalize">{tx.status}</span>
                       </div>
                     </div>
                   ))}
+                  {(stats?.recentOrders ?? []).length === 0 && !statsLoading && (
+                    <p className="text-[13px] text-slate-300 text-center py-4">No transactions yet</p>
+                  )}
                 </div>
               </div>
             </div>

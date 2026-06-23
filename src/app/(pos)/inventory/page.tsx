@@ -3,13 +3,20 @@
 import React, { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { LogOut } from "lucide-react";
+import { useUser } from "@/lib/hooks/useUser";
 import {
   LayoutGrid, ShoppingCart, Receipt, Package, Users,
   BarChart2, Settings, ChevronRight, Search, Plus,
-  Edit2, Trash2, AlertTriangle,
+  Edit2, Trash2, AlertTriangle, Eye, EyeOff, X,
 } from "lucide-react";
 import clsx from "clsx";
 import { formatCurrency } from "@/lib/utils/currency";
+import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct, useToggleProductVisibility } from "@/lib/hooks/useProducts";
+import { useCategories } from "@/lib/hooks/useCategories";
+import { useAppSettings } from "@/components/providers/settings-provider";
 
 const SidebarItem = ({ icon: Icon, label, active = false, href }: { icon: LucideIcon; label: string; active?: boolean; href: string }) => (
   <Link href={href}>
@@ -26,47 +33,93 @@ const SidebarItem = ({ icon: Icon, label, active = false, href }: { icon: Lucide
   </Link>
 );
 
-interface MockProduct {
-  id: string;
+interface ProductFormData {
   name: string;
   sku: string;
-  category: string;
-  price: number;
-  cost: number;
-  stock_qty: number;
-  low_stock_threshold: number;
+  barcode: string;
+  price: string;
+  cost: string;
+  category_id: string;
+  stock_qty: string;
+  low_stock_threshold: string;
+  is_active: boolean;
 }
 
-const MOCK_PRODUCTS: MockProduct[] = [
-  { id: "1", name: "Mineral Water 500ml", sku: "BEV001", category: "Beverages", price: 50, cost: 30, stock_qty: 150, low_stock_threshold: 20 },
-  { id: "2", name: "Green Tea", sku: "BEV002", category: "Beverages", price: 120, cost: 70, stock_qty: 8, low_stock_threshold: 15 },
-  { id: "3", name: "Orange Juice 1L", sku: "BEV003", category: "Beverages", price: 180, cost: 110, stock_qty: 45, low_stock_threshold: 10 },
-  { id: "4", name: "Chicken Burger", sku: "FOD001", category: "Food", price: 350, cost: 200, stock_qty: 30, low_stock_threshold: 10 },
-  { id: "5", name: "Veggie Wrap", sku: "FOD002", category: "Food", price: 280, cost: 160, stock_qty: 5, low_stock_threshold: 10 },
-  { id: "6", name: "Cheese Pizza Slice", sku: "FOD003", category: "Food", price: 220, cost: 130, stock_qty: 40, low_stock_threshold: 10 },
-  { id: "7", name: "Lays Chips Classic", sku: "SNK001", category: "Snacks", price: 60, cost: 40, stock_qty: 200, low_stock_threshold: 30 },
-  { id: "8", name: "Kurkure Masala", sku: "SNK002", category: "Snacks", price: 40, cost: 25, stock_qty: 12, low_stock_threshold: 30 },
-  { id: "9", name: "Milk 1L", sku: "DAI001", category: "Dairy", price: 160, cost: 100, stock_qty: 60, low_stock_threshold: 15 },
-  { id: "10", name: "Yogurt 500g", sku: "DAI002", category: "Dairy", price: 120, cost: 75, stock_qty: 4, low_stock_threshold: 15 },
-  { id: "11", name: "Croissant", sku: "BAK001", category: "Bakery", price: 90, cost: 50, stock_qty: 35, low_stock_threshold: 10 },
-  { id: "12", name: "Chocolate Muffin", sku: "BAK002", category: "Bakery", price: 110, cost: 65, stock_qty: 28, low_stock_threshold: 10 },
-];
-
-const CATEGORIES = ["All", "Beverages", "Food", "Snacks", "Dairy", "Bakery"];
+const EMPTY_FORM: ProductFormData = {
+  name: "", sku: "", barcode: "", price: "", cost: "",
+  category_id: "", stock_qty: "", low_stock_threshold: "10", is_active: true,
+};
 
 export default function InventoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
+  const [showModal, setShowModal] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState<ProductFormData>(EMPTY_FORM);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const filtered = MOCK_PRODUCTS.filter((p) => {
-    const matchesCategory = activeCategory === "All" || p.category === activeCategory;
-    const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase());
+  const appSettings = useAppSettings();
+  const { data: user } = useUser();
+  const router = useRouter();
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
+
+  const { data: products = [], isLoading } = useProducts();
+  const { data: categories = [] } = useCategories();
+  const addProduct = useAddProduct();
+  const updateProduct = useUpdateProduct();
+  const deleteProduct = useDeleteProduct();
+  const toggleVisibility = useToggleProductVisibility();
+
+  const allCategories = ["All", ...categories.map((c) => c.name)];
+
+  const filtered = products.filter((p) => {
+    const matchesCategory = activeCategory === "All" || categories.find((c) => c.id === p.category_id)?.name === activeCategory;
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
-  const lowStockCount = MOCK_PRODUCTS.filter((p) => p.stock_qty <= p.low_stock_threshold).length;
+  const lowStockCount = products.filter((p) => p.stock_qty <= appSettings.lowStockThreshold).length;
+
+  const openAdd = () => { setForm(EMPTY_FORM); setEditId(null); setShowModal(true); };
+  const openEdit = (p: typeof products[0]) => {
+    setForm({
+      name: p.name, sku: p.sku, barcode: p.barcode ?? "",
+      price: String(p.price), cost: String(p.cost),
+      category_id: p.category_id ?? "", stock_qty: String(p.stock_qty),
+      low_stock_threshold: "10", is_active: p.is_active,
+    });
+    setEditId(p.id);
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload = {
+      name: form.name, sku: form.sku, barcode: form.barcode || undefined,
+      price: Number(form.price), cost: Number(form.cost),
+      category_id: form.category_id || "",
+      stock_qty: Number(form.stock_qty),
+      is_active: form.is_active,
+    };
+    if (editId) {
+      await updateProduct.mutateAsync({ id: editId, ...payload });
+    } else {
+      await addProduct.mutateAsync(payload);
+    }
+    setShowModal(false);
+    setForm(EMPTY_FORM);
+    setEditId(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteProduct.mutateAsync(id);
+    setDeleteConfirm(null);
+  };
 
   return (
     <div className="h-screen bg-gradient-to-br from-indigo-200 to-purple-300 flex items-center justify-center p-6 font-sans overflow-hidden">
@@ -86,6 +139,19 @@ export default function InventoryPage() {
             <SidebarItem icon={Users} label="Customers" href="/customers" />
             <SidebarItem icon={BarChart2} label="Reports" href="/reports" />
             <SidebarItem icon={Settings} label="Settings" href="/settings" />
+          </div>
+          <div className="mt-auto pt-4 border-t border-slate-100 mx-2">
+            <div className="flex items-center gap-3 px-3 py-2 rounded-[16px] bg-[#f8f7ff]">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#702bf0] to-[#511ae8] flex items-center justify-center shrink-0">
+                <span className="text-white text-[12px] font-bold">
+                  {user?.email?.charAt(0).toUpperCase() ?? "A"}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-semibold text-slate-700 truncate">Admin</p>
+                <p className="text-[11px] text-slate-400 truncate">{user?.email ?? ""}</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -113,105 +179,201 @@ export default function InventoryPage() {
                     className="bg-white border border-slate-200 rounded-[14px] pl-10 pr-4 py-2.5 text-[14px] focus:outline-none focus:border-[#702bf0] shadow-sm w-[220px]"
                   />
                 </div>
-                <button className="flex items-center gap-2 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white px-5 py-2.5 rounded-[14px] font-semibold text-[14px] hover:opacity-90 transition-opacity">
+                <button onClick={openAdd} className="flex items-center gap-2 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white px-5 py-2.5 rounded-[14px] font-semibold text-[14px] hover:opacity-90 transition-opacity">
                   <Plus size={16} />
                   Add Product
                 </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold"
+                >
+                  <LogOut size={16} />
+                  Logout
+                </button>
               </div>
             </div>
-
-            {/* Category Filter */}
             <div className="flex gap-2">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setActiveCategory(cat)}
-                  className={clsx(
-                    "px-4 py-2 rounded-[12px] text-[13px] font-semibold transition-all",
-                    activeCategory === cat
-                      ? "bg-[#702bf0] text-white shadow-sm"
-                      : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200"
-                  )}
-                >
+              {allCategories.map((cat) => (
+                <button key={cat} onClick={() => setActiveCategory(cat)}
+                  className={clsx("px-4 py-2 rounded-[12px] text-[13px] font-semibold transition-all",
+                    activeCategory === cat ? "bg-[#702bf0] text-white shadow-sm" : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200"
+                  )}>
                   {cat}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Table */}
           <div className="flex-1 overflow-y-auto scrollbar-hide bg-[#f0f4fc] rounded-tl-[2.5rem] px-[44px] py-[34px]">
             <div className="bg-white rounded-[24px] shadow-sm overflow-hidden border border-slate-100">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Product</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">SKU</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Category</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Price</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Cost</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Stock</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Status</th>
-                    <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((product, index) => {
-                    const isLow = product.stock_qty <= product.low_stock_threshold;
-                    return (
-                      <tr
-                        key={product.id}
-                        className={clsx(
-                          "border-b border-slate-50 hover:bg-[#f8f7ff] transition-colors",
-                          index === filtered.length - 1 && "border-b-0"
-                        )}
-                      >
-                        <td className="px-6 py-4 text-[13px] font-semibold text-slate-700">{product.name}</td>
-                        <td className="px-6 py-4 text-[13px] text-slate-400 font-mono">{product.sku}</td>
-                        <td className="px-6 py-4 text-[13px] text-slate-500">{product.category}</td>
-                        <td className="px-6 py-4 text-[13px] font-semibold text-[#702bf0]">{formatCurrency(product.price)}</td>
-                        <td className="px-6 py-4 text-[13px] text-slate-500">{formatCurrency(product.cost)}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            {isLow && <AlertTriangle size={14} className="text-amber-500" />}
-                            <span className={clsx("text-[13px] font-semibold", isLow ? "text-amber-600" : "text-slate-700")}>
-                              {product.stock_qty}
+              {isLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="w-8 h-8 border-2 border-[#702bf0] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Product</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">SKU</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Category</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Price</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Cost</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Stock</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Status</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Show in POS</th>
+                      <th className="text-left px-6 py-4 text-[13px] font-semibold text-slate-400">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((product, index) => {
+                      const isLow = product.stock_qty <= appSettings.lowStockThreshold;
+                      const catName = categories.find((c) => c.id === product.category_id)?.name ?? "—";
+                      return (
+                        <tr key={product.id} className={clsx("border-b border-slate-50 hover:bg-[#f8f7ff] transition-colors", index === filtered.length - 1 && "border-b-0")}>
+                          <td className="px-6 py-4 text-[13px] font-semibold text-slate-700">{product.name}</td>
+                          <td className="px-6 py-4 text-[13px] text-slate-400 font-mono">{product.sku}</td>
+                          <td className="px-6 py-4 text-[13px] text-slate-500">{catName}</td>
+                          <td className="px-6 py-4 text-[13px] font-semibold text-[#702bf0]">{formatCurrency(product.price)}</td>
+                          <td className="px-6 py-4 text-[13px] text-slate-500">{formatCurrency(product.cost)}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              {isLow && <AlertTriangle size={14} className="text-amber-500" />}
+                              <span className={clsx("text-[13px] font-semibold", isLow ? "text-amber-600" : "text-slate-700")}>{product.stock_qty}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={clsx("px-3 py-1 rounded-full text-[12px] font-semibold", isLow ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700")}>
+                              {isLow ? "Low Stock" : "In Stock"}
                             </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={clsx(
-                            "px-3 py-1 rounded-full text-[12px] font-semibold",
-                            isLow ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
-                          )}>
-                            {isLow ? "Low Stock" : "In Stock"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <button className="w-8 h-8 rounded-[10px] bg-[#f0f4fc] flex items-center justify-center hover:bg-[#e8e2ff] transition-colors">
-                              <Edit2 size={14} className="text-[#702bf0]" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => toggleVisibility.mutate({ id: product.id, is_active: !product.is_active })}
+                              className={clsx("flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-[12px] font-semibold transition-all",
+                                product.is_active ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                              )}>
+                              {product.is_active ? <Eye size={13} /> : <EyeOff size={13} />}
+                              {product.is_active ? "Visible" : "Hidden"}
                             </button>
-                            <button className="w-8 h-8 rounded-[10px] bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors">
-                              <Trash2 size={14} className="text-red-500" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {filtered.length === 0 && (
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => openEdit(product)} className="w-8 h-8 rounded-[10px] bg-[#f0f4fc] flex items-center justify-center hover:bg-[#e8e2ff] transition-colors">
+                                <Edit2 size={14} className="text-[#702bf0]" />
+                              </button>
+                              <button onClick={() => setDeleteConfirm(product.id)} className="w-8 h-8 rounded-[10px] bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors">
+                                <Trash2 size={14} className="text-red-500" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+              {!isLoading && filtered.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 text-slate-300">
                   <Package size={40} className="mb-3 opacity-30" />
                   <p className="text-sm font-medium">No products found</p>
+                  <button onClick={openAdd} className="mt-4 text-[#702bf0] text-sm font-semibold hover:underline">Add your first product</button>
                 </div>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Add/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[24px] p-8 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-[20px] font-bold text-[#1e1b4b]">{editId ? "Edit Product" : "Add Product"}</h2>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600"><X size={22} /></button>
+            </div>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[12px] font-semibold text-slate-500 mb-1 block">Product Name *</label>
+                  <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className="w-full border border-slate-200 rounded-[12px] px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#702bf0]" placeholder="Product name" />
+                </div>
+                <div>
+                  <label className="text-[12px] font-semibold text-slate-500 mb-1 block">SKU *</label>
+                  <input required value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    className="w-full border border-slate-200 rounded-[12px] px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#702bf0]" placeholder="e.g. BEV001" />
+                </div>
+                <div>
+                  <label className="text-[12px] font-semibold text-slate-500 mb-1 block">Selling Price (PKR) *</label>
+                  <input required type="number" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })}
+                    className="w-full border border-slate-200 rounded-[12px] px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#702bf0]" placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="text-[12px] font-semibold text-slate-500 mb-1 block">Purchase Cost (PKR)</label>
+                  <input type="number" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })}
+                    className="w-full border border-slate-200 rounded-[12px] px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#702bf0]" placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="text-[12px] font-semibold text-slate-500 mb-1 block">Stock Quantity *</label>
+                  <input required type="number" min="0" value={form.stock_qty} onChange={(e) => setForm({ ...form, stock_qty: e.target.value })}
+                    className="w-full border border-slate-200 rounded-[12px] px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#702bf0]" placeholder="0" />
+                </div>
+                <div>
+                  <label className="text-[12px] font-semibold text-slate-500 mb-1 block">Barcode</label>
+                  <input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                    className="w-full border border-slate-200 rounded-[12px] px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#702bf0]" placeholder="Optional" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[12px] font-semibold text-slate-500 mb-1 block">Category</label>
+                <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+                  className="w-full border border-slate-200 rounded-[12px] px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#702bf0] bg-white">
+                  <option value="">Select category</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <input type="checkbox" id="is_active" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 accent-[#702bf0]" />
+                <label htmlFor="is_active" className="text-[13px] font-semibold text-slate-600">Show in POS Terminal</label>
+              </div>
+              <div className="flex gap-3 mt-2">
+                <button type="button" onClick={() => setShowModal(false)}
+                  className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200">
+                  Cancel
+                </button>
+                <button type="submit" disabled={addProduct.isPending || updateProduct.isPending}
+                  className="flex-1 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-3 rounded-[14px] font-bold text-sm disabled:opacity-50 hover:opacity-90">
+                  {addProduct.isPending || updateProduct.isPending ? "Saving..." : editId ? "Update Product" : "Add Product"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[24px] p-8 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-center w-14 h-14 rounded-full bg-red-50 mx-auto mb-4">
+              <Trash2 size={24} className="text-red-500" />
+            </div>
+            <h2 className="text-[18px] font-bold text-[#1e1b4b] text-center mb-2">Delete Product?</h2>
+            <p className="text-[13px] text-slate-400 text-center mb-6">This action cannot be undone. The product will be permanently deleted.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200">Cancel</button>
+              <button onClick={() => handleDelete(deleteConfirm)} disabled={deleteProduct.isPending}
+                className="flex-1 bg-red-500 text-white py-3 rounded-[14px] font-bold text-sm hover:bg-red-600 disabled:opacity-50">
+                {deleteProduct.isPending ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
