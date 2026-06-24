@@ -64,12 +64,15 @@ export const useCreateOrder = () => {
         .insert(orderItems);
       if (itemsError) throw itemsError;
 
-      await supabase.rpc("reduce_stock_batch", {
-        p_items: JSON.stringify(items.map((i) => ({
-          product_id: i.product_id,
-          quantity: i.quantity,
-        }))),
-      });
+      // Reduce stock concurrently — uses the existing reduce_stock function
+      await Promise.all(
+        items.map((i) =>
+          supabase.rpc("reduce_stock", {
+            p_product_id: i.product_id,
+            p_quantity: i.quantity,
+          })
+        )
+      );
 
       return orderData;
     },

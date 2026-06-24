@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Pagination } from "@/components/ui/Pagination";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -59,6 +60,8 @@ export default function InventoryPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductFormData>(EMPTY_FORM);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   const appSettings = useAppSettings();
   const { data: user } = useUser();
@@ -84,6 +87,12 @@ export default function InventoryPage() {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
+
+  // Reset to page 1 when filters or search change
+  useEffect(() => { setPage(1); }, [activeCategory, searchQuery]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pagedProducts = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const lowStockCount = products.filter((p) => p.stock_qty <= appSettings.lowStockThreshold).length;
 
@@ -233,11 +242,11 @@ export default function InventoryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((product, index) => {
+                    {pagedProducts.map((product, index) => {
                       const isLow = product.stock_qty <= appSettings.lowStockThreshold;
                       const catName = categories.find((c) => c.id === product.category_id)?.name ?? "—";
                       return (
-                        <tr key={product.id} className={clsx("border-b border-slate-50 hover:bg-[#f8f7ff] transition-colors", index === filtered.length - 1 && "border-b-0")}>
+                        <tr key={product.id} className={clsx("border-b border-slate-50 hover:bg-[#f8f7ff] transition-colors", index === pagedProducts.length - 1 && "border-b-0")}>
                           <td className="px-6 py-4 text-[13px] font-semibold text-slate-700">{product.name}</td>
                           <td className="px-6 py-4 text-[13px] text-slate-400 font-mono">{product.sku}</td>
                           <td className="px-6 py-4 text-[13px] text-slate-500">{catName}</td>
@@ -285,6 +294,17 @@ export default function InventoryPage() {
                   <Package size={40} className="mb-3 opacity-30" />
                   <p className="text-sm font-medium">No products found</p>
                   <button onClick={openAdd} className="mt-4 text-[#702bf0] text-sm font-semibold hover:underline">Add your first product</button>
+                </div>
+              )}
+              {!isLoading && filtered.length > 0 && (
+                <div className="px-6 py-4">
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    totalItems={filtered.length}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setPage}
+                  />
                 </div>
               )}
             </div>

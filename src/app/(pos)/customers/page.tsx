@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Pagination } from "@/components/ui/Pagination";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -49,6 +50,8 @@ export default function CustomersPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<CustomerForm>(EMPTY_FORM);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   const { data: user } = useUser();
   const router = useRouter();
@@ -69,6 +72,12 @@ export default function CustomersPage() {
     (c.phone ?? "").includes(searchQuery) ||
     (c.email ?? "").toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Reset to page 1 when search changes
+  useEffect(() => { setPage(1); }, [searchQuery]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pagedCustomers = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const openAdd = () => { setForm(EMPTY_FORM); setEditId(null); setShowModal(true); };
   const openEdit = (c: typeof customers[0]) => {
@@ -170,8 +179,8 @@ export default function CustomersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((customer, index) => (
-                      <tr key={customer.id} className={clsx("border-b border-slate-50 hover:bg-[#f8f7ff] transition-colors", index === filtered.length - 1 && "border-b-0")}>
+                    {pagedCustomers.map((customer, index) => (
+                      <tr key={customer.id} className={clsx("border-b border-slate-50 hover:bg-[#f8f7ff] transition-colors", index === pagedCustomers.length - 1 && "border-b-0")}>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#702bf0] to-[#511ae8] flex items-center justify-center shrink-0">
@@ -216,6 +225,17 @@ export default function CustomersPage() {
                   <Users size={40} className="mb-3 opacity-30" />
                   <p className="text-sm font-medium">No customers found</p>
                   <button onClick={openAdd} className="mt-4 text-[#702bf0] text-sm font-semibold hover:underline">Add your first customer</button>
+                </div>
+              )}
+              {!isLoading && filtered.length > 0 && (
+                <div className="px-6 py-4">
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    totalItems={filtered.length}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setPage}
+                  />
                 </div>
               )}
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Pagination } from "@/components/ui/Pagination";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -49,6 +50,8 @@ export default function OrdersPage() {
   const fc = useCurrency();
   const [activeFilter, setActiveFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   const { data: user } = useUser();
   const router = useRouter();
@@ -70,6 +73,12 @@ export default function OrdersPage() {
     const matchesSearch = order.order_number.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
+
+  // Reset to page 1 when filters or search change
+  useEffect(() => { setPage(1); }, [activeFilter, searchQuery]);
+
+  const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
+  const pagedOrders = filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="h-screen bg-gradient-to-br from-indigo-200 to-purple-300 flex items-center justify-center p-6 font-sans overflow-hidden">
@@ -135,15 +144,18 @@ export default function OrdersPage() {
                 </button>
               </div>
             </div>
-            <div className="flex gap-2">
-              {FILTER_TABS.map((tab) => (
-                <button key={tab} onClick={() => setActiveFilter(tab)}
-                  className={clsx("px-5 py-2 rounded-[12px] text-[13px] font-semibold transition-all cursor-pointer",
-                    activeFilter === tab ? "bg-[#702bf0] text-white shadow-sm" : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200"
-                  )}>
-                  {tab}
-                </button>
-              ))}
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                {FILTER_TABS.map((tab) => (
+                  <button key={tab} onClick={() => setActiveFilter(tab)}
+                    className={clsx("px-5 py-2 rounded-[12px] text-[13px] font-semibold transition-all cursor-pointer",
+                      activeFilter === tab ? "bg-[#702bf0] text-white shadow-sm" : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200"
+                    )}>
+                    {tab}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[13px] text-slate-400 font-medium">{filteredOrders.length} orders</span>
             </div>
           </div>
 
@@ -168,10 +180,10 @@ export default function OrdersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredOrders.map((order, index) => {
+                    {pagedOrders.map((order, index) => {
                       const status = order.status as OrderStatus;
                       return (
-                        <tr key={order.id} className={clsx("border-b border-slate-50 hover:bg-[#f8f7ff] transition-colors", index === filteredOrders.length - 1 && "border-b-0")}>
+                        <tr key={order.id} className={clsx("border-b border-slate-50 hover:bg-[#f8f7ff] transition-colors", index === pagedOrders.length - 1 && "border-b-0")}>
                           <td className="px-6 py-4 text-[13px] font-bold text-[#702bf0]">#{order.order_number.slice(-4)}</td>
                           <td className="px-6 py-4 text-[13px] text-slate-600">{order.subtotal.toLocaleString("en-PK")}</td>
                           <td className="px-6 py-4 text-[13px] text-slate-500">{order.tax.toLocaleString("en-PK")}</td>
@@ -214,6 +226,17 @@ export default function OrdersPage() {
                 <div className="flex flex-col items-center justify-center py-16 text-slate-300">
                   <Receipt size={40} className="mb-3 opacity-30" />
                   <p className="text-sm font-medium">No orders found</p>
+                </div>
+              )}
+              {!isLoading && filteredOrders.length > 0 && (
+                <div className="px-6 py-4">
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    totalItems={filteredOrders.length}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setPage}
+                  />
                 </div>
               )}
             </div>
