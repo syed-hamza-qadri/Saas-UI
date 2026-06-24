@@ -7,6 +7,7 @@ const supabase = createClient();
 export const useCategories = () => {
   return useQuery({
     queryKey: ["categories"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<Category[]> => {
       const { data, error } = await supabase
         .from("categories")

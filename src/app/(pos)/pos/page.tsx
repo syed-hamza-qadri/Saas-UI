@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut } from "lucide-react";
 import { useUser } from "@/lib/hooks/useUser";
+import { useLoadingButton } from "@/lib/hooks/useLoadingButton";
 import {
   Search, ShoppingCart, Trash2, Plus, Minus, User,
   CreditCard, Banknote, Building2, X, ChevronRight,
@@ -14,9 +15,8 @@ import {
   Settings, Barcode, Tag,
 } from "lucide-react";
 import clsx from "clsx";
-import { formatCurrency } from "@/lib/utils/currency";
-import { calculateTax, calculateTotal, calculateSubtotal } from "@/lib/utils/tax";
-import { useAppSettings } from "@/components/providers/settings-provider";
+import { calculateSubtotal, calculateTotal } from "@/lib/utils/tax";
+import { useAppSettings, useCurrency } from "@/components/providers/settings-provider";
 import type { CartItem } from "@/types";
 import { useActiveProducts } from "@/lib/hooks/useProducts";
 import { useCategories } from "@/lib/hooks/useCategories";
@@ -39,9 +39,18 @@ const SidebarItem = ({ icon: Icon, label, active = false, href }: { icon: Lucide
 );
 
 const PaymentModal = ({
-  total, onClose, onConfirm, appSettings
-}: { total: number; onClose: () => void; onConfirm: (method: string) => void; appSettings: { cashPayment: boolean; cardPayment: boolean; bankTransfer: boolean } }) => {
-  const [method, setMethod] = useState<"cash" | "card" | "bank_transfer">("cash");
+  total, onClose, onConfirm, appSettings, isPending
+}: { total: number; onClose: () => void; onConfirm: (method: string) => void; appSettings: { cashPayment: boolean; cardPayment: boolean; bankTransfer: boolean; walletName: string; walletNumber: string }, isPending?: boolean }) => {
+  const fc = useCurrency();
+  const availableMethods = [
+    { id: "cash", label: "Cash", enabled: appSettings.cashPayment },
+    { id: "card", label: "Card", enabled: appSettings.cardPayment },
+    { id: "bank_transfer", label: "Bank", enabled: appSettings.bankTransfer },
+  ].filter(m => m.enabled);
+  
+  const [method, setMethod] = useState<"cash" | "card" | "bank_transfer">(
+    availableMethods[0]?.id as "cash" | "card" | "bank_transfer" ?? "cash"
+  );
   const [cashReceived, setCashReceived] = useState("");
   const change = method === "cash" ? Math.max(0, Number(cashReceived) - total) : 0;
 
@@ -54,8 +63,16 @@ const PaymentModal = ({
         </div>
         <div className="bg-[#f0f4fc] rounded-[16px] p-4 mb-6 text-center">
           <p className="text-slate-500 text-sm mb-1">Total Amount</p>
-          <p className="text-[36px] font-bold text-[#1e1b4b]">{formatCurrency(total)}</p>
+          <p className="text-[36px] font-bold text-[#1e1b4b]">{fc(total)}</p>
         </div>
+        {availableMethods.length === 0 && (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-[24px] p-8 w-full max-w-md shadow-2xl text-center">
+              <p className="text-slate-500 text-sm mb-4">No payment methods are enabled. Please enable at least one in Settings.</p>
+              <button onClick={onClose} className="bg-slate-100 text-slate-600 px-6 py-2.5 rounded-[14px] font-bold text-sm cursor-pointer">Close</button>
+            </div>
+          </div>
+        )}
         <p className="text-slate-500 text-sm font-medium mb-3">Payment Method</p>
         <div className="grid grid-cols-3 gap-3 mb-6">
           {[
@@ -63,15 +80,22 @@ const PaymentModal = ({
             { id: "card", label: "Card", icon: CreditCard, enabled: appSettings.cardPayment },
             { id: "bank_transfer", label: "Bank", icon: Building2, enabled: appSettings.bankTransfer },
           ].filter(m => m.enabled).map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => setMethod(id as "cash" | "card" | "bank_transfer")}
+            <button key={id} onClick={() => setMethod(id as "cash" | "card" | "bank_transfer")} disabled={isPending}
               className={clsx("flex flex-col items-center gap-2 p-4 rounded-[16px] border-2 transition-all",
-                method === id ? "border-[#702bf0] bg-[#f5f0ff]" : "border-slate-200 hover:border-slate-300"
+                method === id ? "border-[#702bf0] bg-[#f5f0ff] cursor-pointer disabled:opacity-50" : "border-slate-200 hover:border-slate-300 cursor-pointer disabled:opacity-50"
               )}>
               <Icon size={22} className={method === id ? "text-[#702bf0]" : "text-slate-400"} />
               <span className={clsx("text-[13px] font-semibold", method === id ? "text-[#702bf0]" : "text-slate-500")}>{label}</span>
             </button>
           ))}
         </div>
+        
+        {method === "bank_transfer" && (appSettings.walletName || appSettings.walletNumber) && (
+  <div className="mb-4 bg-emerald-50 rounded-[12px] px-4 py-3">
+    {appSettings.walletName && <p className="text-[12px] text-emerald-500 font-medium">{appSettings.walletName}</p>}
+    {appSettings.walletNumber && <p className="text-[14px] font-bold text-emerald-700">{appSettings.walletNumber}</p>}
+  </div>
+)}
         {method === "cash" && (
           <div className="mb-6">
             <label className="text-slate-500 text-sm font-medium mb-2 block">Cash Received (PKR)</label>
@@ -81,15 +105,20 @@ const PaymentModal = ({
             {Number(cashReceived) > 0 && (
               <div className="mt-3 flex justify-between items-center bg-emerald-50 rounded-[12px] px-4 py-3">
                 <span className="text-emerald-700 font-medium text-sm">Change</span>
-                <span className="text-emerald-700 font-bold text-[16px]">{formatCurrency(change)}</span>
+                <span className="text-emerald-700 font-bold text-[16px]">{fc(change)}</span>
               </div>
             )}
           </div>
         )}
         <button onClick={() => onConfirm(method)}
-          disabled={method === "cash" && Number(cashReceived) < total}
-          className="w-full bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-4 rounded-[16px] font-bold text-[16px] disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity">
-          Confirm Payment
+          disabled={(method === "cash" && Number(cashReceived) < total) || isPending}
+          className="w-full bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-4 rounded-[16px] font-bold text-[16px] disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity cursor-pointer">
+          {isPending ? (
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              <span>Processing...</span>
+            </div>
+          ) : "Confirm Payment"}
         </button>
       </div>
     </div>
@@ -99,12 +128,15 @@ const PaymentModal = ({
 const ReceiptModal = ({ items, subtotal, tax, discount, total, method, orderNumber, onClose, appSettings }: {
   items: CartItem[]; subtotal: number; tax: number; discount: number;
   total: number; method: string; orderNumber: string; onClose: () => void;
-  appSettings: { taxRate: number; receiptFooter: string };
-}) => (
+  appSettings: { taxRate: number; receiptFooter: string; storeName: string; currency: string; };
+}) => {
+  const fc = useCurrency();
+  const { loading: printLoading, withLoading: withPrintLoading } = useLoadingButton();
+  return (
   <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
     <div className="bg-white rounded-[24px] p-8 w-full max-w-sm shadow-2xl">
       <div className="text-center mb-6">
-        <h2 className="text-[20px] font-bold text-[#1e1b4b]">POS System</h2>
+        <h2 className="text-[20px] font-bold text-[#1e1b4b]">{appSettings.storeName}</h2>
         <p className="text-slate-400 text-sm">Receipt</p>
         <p className="text-slate-500 text-xs mt-1">Order #{orderNumber}</p>
         <p className="text-slate-400 text-xs">{new Date().toLocaleString("en-PK")}</p>
@@ -114,31 +146,34 @@ const ReceiptModal = ({ items, subtotal, tax, discount, total, method, orderNumb
         <div key={item.product_id} className="flex justify-between items-center mb-2">
           <div>
             <p className="text-[13px] font-medium text-slate-700">{item.name}</p>
-            <p className="text-[12px] text-slate-400">{item.quantity} x {formatCurrency(item.price)}</p>
+            <p className="text-[12px] text-slate-400">{item.quantity} x {appSettings.currency} {Number(item.price).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
-          <p className="text-[13px] font-semibold text-slate-700">{formatCurrency(item.subtotal)}</p>
+          <p className="text-[13px] font-semibold text-slate-700">{appSettings.currency} {Number(item.subtotal).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
         </div>
       ))}
       <div className="border-t border-dashed border-slate-200 mt-4 mb-4" />
       <div className="space-y-1 mb-4">
-        <div className="flex justify-between text-sm text-slate-500"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-        {discount > 0 && <div className="flex justify-between text-sm text-emerald-600"><span>Discount</span><span>- {formatCurrency(discount)}</span></div>}
-        <div className="flex justify-between text-sm text-slate-500"><span>GST ({Math.round(appSettings.taxRate * 100)}%)</span><span>{formatCurrency(tax)}</span></div>
-        <div className="flex justify-between font-bold text-[#1e1b4b] text-[15px] pt-1 border-t border-slate-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
+        <div className="flex justify-between text-sm text-slate-500"><span>Subtotal</span><span>{appSettings.currency} {Number(subtotal).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+        {discount > 0 && <div className="flex justify-between text-sm text-emerald-600"><span>Discount</span><span>- {appSettings.currency} {Number(discount).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>}
+        <div className="flex justify-between text-sm text-slate-500"><span>GST ({Math.round(appSettings.taxRate * 100)}%)</span><span>{appSettings.currency} {Number(tax).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+        <div className="flex justify-between font-bold text-[#1e1b4b] text-[15px] pt-1 border-t border-slate-100"><span>Total</span><span>{appSettings.currency} {Number(total).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
         <div className="flex justify-between text-sm text-slate-500"><span>Payment</span><span className="capitalize">{method.replace("_", " ")}</span></div>
       </div>
       {appSettings.receiptFooter && (
         <p className="text-center text-[11px] text-slate-400 mt-2 mb-4">{appSettings.receiptFooter}</p>
       )}
       <div className="flex gap-3">
-        <button onClick={() => window.print()} className="flex-1 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-3 rounded-[14px] font-bold text-sm hover:opacity-90">Print</button>
+        <button onClick={() => withPrintLoading(async () => window.print())} disabled={printLoading} className="flex-1 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-3 rounded-[14px] font-bold text-sm hover:opacity-90 cursor-pointer disabled:opacity-50">{printLoading ? "Printing..." : "Print"}</button>
         <button onClick={onClose} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200">Close</button>
       </div>
     </div>
   </div>
 );
+};
 
 export default function POSTerminal() {
+  const { loading: logoutLoading, withLoading: withLogoutLoading } = useLoadingButton();
+  const fc = useCurrency();
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -281,7 +316,7 @@ export default function POSTerminal() {
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-semibold text-slate-700 truncate">Admin</p>
+                <p className="text-[12px] font-semibold text-slate-700 truncate">{appSettings.storeName}</p>
                 <p className="text-[11px] text-slate-400 truncate">{user?.email ?? ""}</p>
               </div>
             </div>
@@ -296,12 +331,17 @@ export default function POSTerminal() {
             <div className="flex items-center justify-between mb-4">
               <h1 className="text-[26px] font-bold text-[#1e1b4b] tracking-tight">POS Terminal</h1>
               <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold"
-              >
-                <LogOut size={16} />
-                Logout
-              </button>
+                  onClick={() => withLogoutLoading(handleLogout)}
+                  disabled={logoutLoading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  {logoutLoading ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <LogOut size={16} />
+                  )}
+                  {logoutLoading ? "Logging out..." : "Logout"}
+                </button>
             </div>
             <div className="flex gap-3 mb-4">
               <div className="flex-1 relative">
@@ -320,14 +360,14 @@ export default function POSTerminal() {
             <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide pb-1">
               <button onClick={() => setSelectedCategory("all")}
                 className={clsx("px-4 py-2 rounded-[12px] text-[13px] font-semibold whitespace-nowrap transition-all",
-                  selectedCategory === "all" ? "bg-[#702bf0] text-white shadow-sm" : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200")}
+                  selectedCategory === "all" ? "bg-[#702bf0] text-white shadow-sm" : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200 cursor-pointer")}
               >
                 All
               </button>
               {categories.map((cat) => (
                 <button key={cat.id} onClick={() => setSelectedCategory(cat.id)}
                   className={clsx("px-4 py-2 rounded-[12px] text-[13px] font-semibold whitespace-nowrap transition-all",
-                    selectedCategory === cat.id ? "bg-[#702bf0] text-white shadow-sm" : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200")}
+                    selectedCategory === cat.id ? "bg-[#702bf0] text-white shadow-sm" : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200 cursor-pointer")}
                 >
                   {cat.name}
                 </button>
@@ -341,14 +381,25 @@ export default function POSTerminal() {
               ) : (
                 <div className="grid grid-cols-3 gap-3">
                   {filteredProducts.map((product) => (
-                    <button key={product.id} onClick={() => addToCart(product)}
-                      className="bg-white rounded-[18px] p-4 text-left hover:shadow-md transition-all border border-slate-100 hover:border-[#702bf0]/30 group">
+                    <button key={product.id} onClick={() => product.stock_qty > 0 && addToCart(product)}
+                      disabled={product.stock_qty === 0}
+                      className={clsx(
+                        "bg-white rounded-[18px] p-4 text-left transition-all border cursor-pointer",
+                        product.stock_qty === 0
+                          ? "opacity-50 cursor-not-allowed border-slate-100"
+                          : "hover:shadow-md hover:border-[#702bf0]/30 border-slate-100 group"
+                      )}>
                       <p className="text-[13px] font-semibold text-slate-700 mb-1 line-clamp-2 leading-tight">{product.name}</p>
                       <p className="text-[11px] text-slate-400 mb-2">{product.sku}</p>
-                      <p className="text-[14px] font-bold text-[#702bf0]">{formatCurrency(product.price)}</p>
+                      <p className="text-[14px] font-bold text-[#702bf0]">{fc(product.price)}</p>
                       <div className="flex items-center gap-1 mt-1">
-                        <div className={clsx("w-2 h-2 rounded-full", product.stock_qty > 20 ? "bg-emerald-400" : "bg-amber-400")} />
-                        <span className="text-[11px] text-slate-400">Stock: {product.stock_qty}</span>
+                        <div className={clsx("w-2 h-2 rounded-full",
+                          product.stock_qty === 0 ? "bg-red-400" :
+                          product.stock_qty > 20 ? "bg-emerald-400" : "bg-amber-400"
+                        )} />
+                        <span className="text-[11px] text-slate-400">
+                          {product.stock_qty === 0 ? "Out of Stock" : `Stock: ${product.stock_qty}`}
+                        </span>
                       </div>
                     </button>
                   ))}
@@ -375,7 +426,7 @@ export default function POSTerminal() {
               <div className="relative">
                 <button
                   onClick={() => setShowCustomerSearch(!showCustomerSearch)}
-                  className="w-full flex items-center gap-3 bg-[#f0f4fc] rounded-[12px] px-4 py-2.5 hover:bg-slate-100 transition-colors"
+                  className="w-full flex items-center gap-3 bg-[#f0f4fc] rounded-[12px] px-4 py-2.5 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   <User size={16} className="text-slate-400" />
                   {selectedCustomer ? (
@@ -440,20 +491,20 @@ export default function POSTerminal() {
                   <div key={item.product_id} className="flex items-center gap-3 mb-3 bg-[#f8f9fc] rounded-[14px] p-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-semibold text-slate-700 truncate">{item.name}</p>
-                      <p className="text-[12px] text-slate-400">{formatCurrency(item.price)} each</p>
+                      <p className="text-[12px] text-slate-400">{fc(item.price)} each</p>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button onClick={() => updateQty(item.product_id, item.quantity - 1)} className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50">
+                      <button onClick={() => updateQty(item.product_id, item.quantity - 1)} className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 cursor-pointer">
                         <Minus size={12} />
                       </button>
                       <span className="text-[13px] font-bold text-slate-700 w-6 text-center">{item.quantity}</span>
-                      <button onClick={() => updateQty(item.product_id, item.quantity + 1)} className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50">
+                      <button onClick={() => updateQty(item.product_id, item.quantity + 1)} className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 cursor-pointer">
                         <Plus size={12} />
                       </button>
                     </div>
                     <div className="text-right">
-                      <p className="text-[13px] font-bold text-[#702bf0]">{formatCurrency(item.subtotal)}</p>
-                      <button onClick={() => removeFromCart(item.product_id)} className="text-slate-300 hover:text-red-400 mt-0.5">
+                      <p className="text-[13px] font-bold text-[#702bf0]">{fc(item.subtotal)}</p>
+                      <button onClick={() => removeFromCart(item.product_id)} className="text-slate-300 hover:text-red-400 mt-0.5 cursor-pointer">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -472,19 +523,20 @@ export default function POSTerminal() {
                 </div>
               </div>
               <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-[13px] text-slate-500"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-                {discountAmount > 0 && <div className="flex justify-between text-[13px] text-emerald-600"><span>Discount ({discountPercent}%)</span><span>- {formatCurrency(discountAmount)}</span></div>}
-                <div className="flex justify-between text-[13px] text-slate-500"><span>GST ({Math.round(appSettings.taxRate * 100)}%)</span><span>{formatCurrency(tax)}</span></div>
-                <div className="flex justify-between font-bold text-[#1e1b4b] text-[15px] pt-2 border-t border-slate-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
+                <div className="flex justify-between text-[13px] text-slate-500"><span>Subtotal</span><span>{appSettings.currency} {Number(subtotal).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                {discountAmount > 0 && <div className="flex justify-between text-[13px] text-emerald-600"><span>Discount ({discountPercent}%)</span><span>- {fc(discountAmount)}</span></div>}
+                <div className="flex justify-between text-[13px] text-slate-500"><span>GST ({Math.round(appSettings.taxRate * 100)}%)</span><span>{appSettings.currency} {Number(tax).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                <div className="flex justify-between font-bold text-[#1e1b4b] text-[15px] pt-2 border-t border-slate-100"><span>Total</span><span>{appSettings.currency} {Number(total).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => { setCartItems([]); setDiscountPercent(0); }} disabled={cartItems.length === 0}
-                  className="flex-none px-4 py-3 rounded-[14px] bg-slate-100 text-slate-500 font-semibold text-sm hover:bg-slate-200 disabled:opacity-40">
+                  className="flex-none px-4 py-3 rounded-[14px] bg-slate-100 text-slate-500 font-semibold text-sm hover:bg-slate-200 disabled:opacity-40 cursor-pointer">
                   Clear
                 </button>
-                <button onClick={() => setShowPayment(true)} disabled={cartItems.length === 0}
-                  className="flex-1 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-3 rounded-[14px] font-bold text-[15px] disabled:opacity-50 hover:opacity-90 transition-opacity">
-                  Charge {cartItems.length > 0 ? formatCurrency(total) : ""}
+                <button onClick={() => setShowPayment(true)}
+                  disabled={cartItems.length === 0 || createOrder.isPending}
+                  className="flex-1 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-3 rounded-[14px] font-bold text-[15px] disabled:opacity-50 hover:opacity-90 transition-opacity cursor-pointer">
+                  {createOrder.isPending ? "Processing..." : `Charge ${cartItems.length > 0 ? fc(total) : ""}`}
                 </button>
               </div>
             </div>
@@ -492,7 +544,7 @@ export default function POSTerminal() {
         </div>
       </div>
 
-      {showPayment && <PaymentModal total={total} onClose={() => setShowPayment(false)} onConfirm={handleConfirmPayment} appSettings={appSettings} />}
+      {showPayment && <PaymentModal total={total} onClose={() => setShowPayment(false)} onConfirm={handleConfirmPayment} appSettings={appSettings} isPending={createOrder.isPending} />}
       {showReceipt && <ReceiptModal items={cartItems} subtotal={subtotal} tax={tax} discount={discountAmount} total={total} method={paymentMethod} orderNumber={orderNumber} onClose={handleCloseReceipt} appSettings={appSettings} />}
     </div>
   );

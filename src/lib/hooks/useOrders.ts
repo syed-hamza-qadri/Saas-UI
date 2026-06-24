@@ -8,6 +8,7 @@ const supabase = createClient();
 export const useOrders = () => {
   return useQuery({
     queryKey: ["orders"],
+    staleTime: 15 * 1000,
     queryFn: async (): Promise<Order[]> => {
       const { data, error } = await supabase
         .from("orders")
@@ -63,12 +64,12 @@ export const useCreateOrder = () => {
         .insert(orderItems);
       if (itemsError) throw itemsError;
 
-      for (const item of items) {
-        await supabase.rpc("reduce_stock", {
-          p_product_id: item.product_id,
-          p_quantity: item.quantity,
-        });
-      }
+      await supabase.rpc("reduce_stock_batch", {
+        p_items: JSON.stringify(items.map((i) => ({
+          product_id: i.product_id,
+          quantity: i.quantity,
+        }))),
+      });
 
       return orderData;
     },

@@ -4,15 +4,16 @@ import React, { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAppSettings, useCurrency } from "@/components/providers/settings-provider";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut } from "lucide-react";
 import { useUser } from "@/lib/hooks/useUser";
+import { useLoadingButton } from "@/lib/hooks/useLoadingButton";
 import {
   LayoutGrid, ShoppingCart, Receipt, Package, Users,
   BarChart2, Settings, ChevronRight, Search, Eye, RotateCcw, XCircle,
 } from "lucide-react";
 import clsx from "clsx";
-import { formatCurrency } from "@/lib/utils/currency";
 import { useOrders, useOrderItems, useUpdateOrderStatus } from "@/lib/hooks/useOrders";
 
 const SidebarItem = ({ icon: Icon, label, active = false, href }: { icon: LucideIcon; label: string; active?: boolean; href: string }) => (
@@ -42,6 +43,10 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
 const FILTER_TABS = ["All", "Completed", "Pending", "Refunded", "Voided"] as const;
 
 export default function OrdersPage() {
+  const { loading: printLoading, withLoading: withPrintLoading } = useLoadingButton();
+  const { loading: logoutLoading, withLoading: withLogoutLoading } = useLoadingButton();
+  const appSettings = useAppSettings();
+  const fc = useCurrency();
   const [activeFilter, setActiveFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -93,7 +98,7 @@ export default function OrdersPage() {
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-semibold text-slate-700 truncate">Admin</p>
+                <p className="text-[12px] font-semibold text-slate-700 truncate">{appSettings.storeName}</p>
                 <p className="text-[11px] text-slate-400 truncate">{user?.email ?? ""}</p>
               </div>
             </div>
@@ -117,18 +122,23 @@ export default function OrdersPage() {
                   />
                 </div>
                 <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold"
+                  onClick={() => withLogoutLoading(handleLogout)}
+                  disabled={logoutLoading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold cursor-pointer disabled:opacity-50"
                 >
-                  <LogOut size={16} />
-                  Logout
+                  {logoutLoading ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <LogOut size={16} />
+                  )}
+                  {logoutLoading ? "Logging out..." : "Logout"}
                 </button>
               </div>
             </div>
             <div className="flex gap-2">
               {FILTER_TABS.map((tab) => (
                 <button key={tab} onClick={() => setActiveFilter(tab)}
-                  className={clsx("px-5 py-2 rounded-[12px] text-[13px] font-semibold transition-all",
+                  className={clsx("px-5 py-2 rounded-[12px] text-[13px] font-semibold transition-all cursor-pointer",
                     activeFilter === tab ? "bg-[#702bf0] text-white shadow-sm" : "bg-white text-slate-500 hover:bg-slate-50 border border-slate-200"
                   )}>
                   {tab}
@@ -177,17 +187,17 @@ export default function OrdersPage() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
-                              <button onClick={() => setViewOrder(order)} className="w-8 h-8 rounded-[10px] bg-[#f0f4fc] flex items-center justify-center hover:bg-[#e8e2ff] transition-colors">
+                              <button onClick={() => setViewOrder(order)} className="w-8 h-8 rounded-[10px] bg-[#f0f4fc] flex items-center justify-center hover:bg-[#e8e2ff] transition-colors cursor-pointer">
                                 <Eye size={15} className="text-[#702bf0]" />
                               </button>
                               {order.status === "completed" && (
                                 <>
                                   <button onClick={() => setActionConfirm({ id: order.id, action: "refunded" })}
-                                    className="w-8 h-8 rounded-[10px] bg-blue-50 flex items-center justify-center hover:bg-blue-100 transition-colors" title="Refund">
+                                    className="w-8 h-8 rounded-[10px] bg-blue-50 flex items-center justify-center hover:bg-blue-100 transition-colors cursor-pointer" title="Refund">
                                     <RotateCcw size={14} className="text-blue-500" />
                                   </button>
                                   <button onClick={() => setActionConfirm({ id: order.id, action: "voided" })}
-                                    className="w-8 h-8 rounded-[10px] bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors" title="Void">
+                                    className="w-8 h-8 rounded-[10px] bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors cursor-pointer" title="Void">
                                     <XCircle size={14} className="text-red-500" />
                                   </button>
                                 </>
@@ -214,7 +224,7 @@ export default function OrdersPage() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-[24px] p-8 w-full max-w-sm shadow-2xl">
             <div className="text-center mb-4">
-              <h2 className="text-[20px] font-bold text-[#1e1b4b]">POS System</h2>
+              <h2 className="text-[20px] font-bold text-[#1e1b4b]">{appSettings.storeName}</h2>
               <p className="text-slate-400 text-sm">Order Receipt</p>
               <p className="text-slate-500 text-xs mt-1">#{viewOrder.order_number.slice(-4)}</p>
               <p className="text-slate-400 text-xs">{new Date(viewOrder.created_at).toLocaleString("en-PK")}</p>
@@ -230,9 +240,9 @@ export default function OrdersPage() {
                   <div key={item.id} className="flex justify-between items-center">
                     <div>
                       <p className="text-[13px] font-medium text-slate-700">{item.product_name}</p>
-                      <p className="text-[11px] text-slate-400">{item.quantity} x PKR {Number(item.unit_price).toLocaleString("en-PK")}</p>
+                      <p className="text-[11px] text-slate-400">{item.quantity} x {fc(Number(item.unit_price))}</p>
                     </div>
-                    <p className="text-[13px] font-semibold text-slate-700">PKR {Number(item.subtotal).toLocaleString("en-PK")}</p>
+                    <p className="text-[13px] font-semibold text-slate-700">{fc(Number(item.subtotal))}</p>
                   </div>
                 ))}
               </div>
@@ -240,18 +250,18 @@ export default function OrdersPage() {
             <div className="border-t border-dashed border-slate-200 mb-4" />
             <div className="space-y-2 mb-4">
               <div className="flex justify-between text-sm text-slate-500">
-                <span>Subtotal</span><span>PKR {viewOrder.subtotal.toLocaleString("en-PK")}</span>
+                <span>Subtotal</span><span>{fc(Number(viewOrder.subtotal))}</span>
               </div>
               {viewOrder.discount > 0 && (
                 <div className="flex justify-between text-sm text-emerald-600">
-                  <span>Discount</span><span>- PKR {viewOrder.discount.toLocaleString("en-PK")}</span>
+                  <span>Discount</span><span>- {fc(Number(viewOrder.discount))}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm text-slate-500">
-                <span>GST (17%)</span><span>PKR {viewOrder.tax.toLocaleString("en-PK")}</span>
+                <span>GST (17%)</span><span>{fc(Number(viewOrder.tax))}</span>
               </div>
               <div className="flex justify-between font-bold text-[#1e1b4b] text-[15px] pt-2 border-t border-slate-100">
-                <span>Total</span><span>PKR {viewOrder.total.toLocaleString("en-PK")}</span>
+                <span>Total</span><span>{fc(Number(viewOrder.total))}</span>
               </div>
               <div className="flex justify-between text-sm text-slate-500">
                 <span>Payment</span><span className="capitalize">{viewOrder.payment_method.replace("_", " ")}</span>
@@ -264,8 +274,8 @@ export default function OrdersPage() {
               </div>
             </div>
             <div className="flex gap-3 mt-4">
-              <button onClick={() => window.print()} className="flex-1 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-3 rounded-[14px] font-bold text-sm hover:opacity-90">Print</button>
-              <button onClick={() => setViewOrder(null)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200">Close</button>
+              <button onClick={() => withPrintLoading(async () => window.print())} disabled={printLoading} className="flex-1 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-3 rounded-[14px] font-bold text-sm hover:opacity-90 cursor-pointer disabled:opacity-50">{printLoading ? "Printing..." : "Print"}</button>
+              <button onClick={() => setViewOrder(null)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200 cursor-pointer">Close</button>
             </div>
           </div>
         </div>
@@ -289,7 +299,7 @@ export default function OrdersPage() {
             </p>
             <div className="flex gap-3">
               <button onClick={() => setActionConfirm(null)}
-                className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200">
+                className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200 cursor-pointer">
                 Cancel
               </button>
               <button
@@ -299,7 +309,7 @@ export default function OrdersPage() {
                 }}
                 disabled={updateStatus.isPending}
                 className={clsx("flex-1 text-white py-3 rounded-[14px] font-bold text-sm disabled:opacity-50",
-                  actionConfirm.action === "voided" ? "bg-red-500 hover:bg-red-600" : "bg-blue-500 hover:bg-blue-600"
+                  actionConfirm.action === "voided" ? "bg-red-500 hover:bg-red-600 cursor-pointer" : "bg-blue-500 hover:bg-blue-600 cursor-pointer"
                 )}>
                 {updateStatus.isPending ? "Processing..." : actionConfirm.action === "voided" ? "Void Order" : "Refund Order"}
               </button>

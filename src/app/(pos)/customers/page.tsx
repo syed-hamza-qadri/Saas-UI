@@ -4,16 +4,17 @@ import React, { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAppSettings, useCurrency } from "@/components/providers/settings-provider";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut } from "lucide-react";
 import { useUser } from "@/lib/hooks/useUser";
+import { useLoadingButton } from "@/lib/hooks/useLoadingButton";
 import {
   LayoutGrid, ShoppingCart, Receipt, Package, Users,
   BarChart2, Settings, ChevronRight, Search, Plus,
   Phone, Mail, Star, Edit2, Trash2, X,
 } from "lucide-react";
 import clsx from "clsx";
-import { formatCurrency } from "@/lib/utils/currency";
 import { useCustomers, useAddCustomer, useUpdateCustomer, useDeleteCustomer } from "@/lib/hooks/useCustomers";
 
 const SidebarItem = ({ icon: Icon, label, active = false, href }: { icon: LucideIcon; label: string; active?: boolean; href: string }) => (
@@ -40,6 +41,9 @@ interface CustomerForm {
 const EMPTY_FORM: CustomerForm = { name: "", phone: "", email: "" };
 
 export default function CustomersPage() {
+  const { loading: logoutLoading, withLoading: withLogoutLoading } = useLoadingButton();
+  const appSettings = useAppSettings();
+  const fc = useCurrency();
   const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -110,7 +114,7 @@ export default function CustomersPage() {
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-semibold text-slate-700 truncate">Admin</p>
+                <p className="text-[12px] font-semibold text-slate-700 truncate">{appSettings.storeName}</p>
                 <p className="text-[11px] text-slate-400 truncate">{user?.email ?? ""}</p>
               </div>
             </div>
@@ -128,15 +132,20 @@ export default function CustomersPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="bg-[#f0f4fc] border border-slate-200 rounded-[14px] pl-10 pr-4 py-2.5 text-[14px] focus:outline-none focus:border-[#702bf0] w-[220px]" />
                 </div>
-                <button onClick={openAdd} className="flex items-center gap-2 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white px-5 py-2.5 rounded-[14px] font-semibold text-[14px] hover:opacity-90 transition-opacity">
+                <button onClick={openAdd} className="flex items-center gap-2 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white px-5 py-2.5 rounded-[14px] font-semibold text-[14px] hover:opacity-90 transition-opacity cursor-pointer">
                   <Plus size={16} />Add Customer
                 </button>
                 <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold"
+                  onClick={() => withLogoutLoading(handleLogout)}
+                  disabled={logoutLoading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold cursor-pointer disabled:opacity-50"
                 >
-                  <LogOut size={16} />
-                  Logout
+                  {logoutLoading ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <LogOut size={16} />
+                  )}
+                  {logoutLoading ? "Logging out..." : "Logout"}
                 </button>
               </div>
             </div>
@@ -177,7 +186,7 @@ export default function CustomersPage() {
                             {customer.email && <div className="flex items-center gap-2"><Mail size={12} className="text-slate-400" /><span className="text-[12px] text-slate-400">{customer.email}</span></div>}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-[13px] font-semibold text-[#702bf0]">{formatCurrency(customer.total_spent)}</td>
+                        <td className="px-6 py-4 text-[13px] font-semibold text-[#702bf0]">{fc(customer.total_spent)}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <Star size={14} className="text-amber-400 fill-amber-400" />
@@ -189,10 +198,10 @@ export default function CustomersPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            <button onClick={() => openEdit(customer)} className="w-8 h-8 rounded-[10px] bg-[#f0f4fc] flex items-center justify-center hover:bg-[#e8e2ff] transition-colors">
+                            <button onClick={() => openEdit(customer)} className="w-8 h-8 rounded-[10px] bg-[#f0f4fc] flex items-center justify-center hover:bg-[#e8e2ff] transition-colors cursor-pointer">
                               <Edit2 size={14} className="text-[#702bf0]" />
                             </button>
-                            <button onClick={() => setDeleteConfirm(customer.id)} className="w-8 h-8 rounded-[10px] bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors">
+                            <button onClick={() => setDeleteConfirm(customer.id)} disabled={deleteCustomer.isPending} className="w-8 h-8 rounded-[10px] bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors cursor-pointer">
                               <Trash2 size={14} className="text-red-500" />
                             </button>
                           </div>
@@ -238,9 +247,9 @@ export default function CustomersPage() {
                   className="w-full border border-slate-200 rounded-[12px] px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#702bf0]" placeholder="customer@email.com" />
               </div>
               <div className="flex gap-3 mt-2">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200 cursor-pointer">Cancel</button>
                 <button type="submit" disabled={addCustomer.isPending || updateCustomer.isPending}
-                  className="flex-1 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-3 rounded-[14px] font-bold text-sm disabled:opacity-50 hover:opacity-90">
+                  className="flex-1 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-3 rounded-[14px] font-bold text-sm disabled:opacity-50 hover:opacity-90 cursor-pointer">
                   {addCustomer.isPending || updateCustomer.isPending ? "Saving..." : editId ? "Update" : "Add Customer"}
                 </button>
               </div>
@@ -261,7 +270,7 @@ export default function CustomersPage() {
               <button onClick={() => setDeleteConfirm(null)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm">Cancel</button>
               <button onClick={async () => { await deleteCustomer.mutateAsync(deleteConfirm); setDeleteConfirm(null); }}
                 disabled={deleteCustomer.isPending}
-                className="flex-1 bg-red-500 text-white py-3 rounded-[14px] font-bold text-sm hover:bg-red-600 disabled:opacity-50">
+                className="flex-1 bg-red-500 text-white py-3 rounded-[14px] font-bold text-sm hover:bg-red-600 disabled:opacity-50 cursor-pointer">
                 {deleteCustomer.isPending ? "Deleting..." : "Delete"}
               </button>
             </div>

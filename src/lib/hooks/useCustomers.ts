@@ -8,6 +8,7 @@ const supabase = createClient();
 export const useCustomers = () => {
   return useQuery({
     queryKey: ["customers"],
+    staleTime: 60 * 1000,
     queryFn: async (): Promise<Customer[]> => {
       const { data, error } = await supabase
         .from("customers")

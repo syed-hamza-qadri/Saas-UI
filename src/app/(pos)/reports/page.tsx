@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { useUser } from "@/lib/hooks/useUser";
+import { useLoadingButton } from "@/lib/hooks/useLoadingButton";
 import {
   LayoutGrid, ShoppingCart, Receipt, Package, Users,
   BarChart2, Settings, ChevronRight, Download,
@@ -16,8 +17,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line,
 } from "recharts";
-import { formatCurrency } from "@/lib/utils/currency";
 import { useQuery } from "@tanstack/react-query";
+import { useAppSettings, useCurrency } from "@/components/providers/settings-provider";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -131,6 +132,9 @@ const PAYMENT_COLORS: Record<string, string> = {
 };
 
 export default function ReportsPage() {
+  const { loading: logoutLoading, withLoading: withLogoutLoading } = useLoadingButton();
+  const appSettings = useAppSettings();
+  const fc = useCurrency();
   const [activePeriod, setActivePeriod] = useState<Period>("This Week");
   const { data, isLoading } = useReportsData(activePeriod);
 
@@ -144,9 +148,9 @@ export default function ReportsPage() {
   };
 
   const summaryCards = [
-    { label: "Total Revenue", value: formatCurrency(data?.totalRevenue ?? 0), icon: TrendingUp, positive: true },
+    { label: "Total Revenue", value: fc(data?.totalRevenue ?? 0), icon: TrendingUp, positive: true },
     { label: "Total Orders", value: String(data?.totalOrders ?? 0), icon: ShoppingBag, positive: true },
-    { label: "Avg Order Value", value: data?.totalOrders ? formatCurrency((data.totalRevenue) / data.totalOrders) : formatCurrency(0), icon: TrendingDown, positive: true },
+    { label: "Avg Order Value", value: data?.totalOrders ? fc((data.totalRevenue) / data.totalOrders) : fc(0), icon: TrendingDown, positive: true },
     { label: "Payment Methods", value: String(data?.paymentSummary.length ?? 0), icon: CreditCard, positive: true },
   ];
 
@@ -175,7 +179,7 @@ export default function ReportsPage() {
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-semibold text-slate-700 truncate">Admin</p>
+                <p className="text-[12px] font-semibold text-slate-700 truncate">{appSettings.storeName}</p>
                 <p className="text-[11px] text-slate-400 truncate">{user?.email ?? ""}</p>
               </div>
             </div>
@@ -189,21 +193,26 @@ export default function ReportsPage() {
               <div className="flex items-center gap-3">
                 {PERIOD_TABS.map((tab) => (
                   <button key={tab} onClick={() => setActivePeriod(tab)}
-                    className={clsx("px-4 py-2 rounded-[12px] text-[13px] font-semibold transition-all",
+                    className={clsx("px-4 py-2 rounded-[12px] text-[13px] font-semibold transition-all cursor-pointer",
                       activePeriod === tab ? "bg-[#702bf0] text-white" : "bg-[#f0f4fc] text-slate-500 hover:bg-slate-200"
                     )}>
                     {tab}
                   </button>
                 ))}
-                <button className="flex items-center gap-2 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white px-5 py-2.5 rounded-[14px] font-semibold text-[14px] hover:opacity-90">
+                <button className="flex items-center gap-2 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white px-5 py-2.5 rounded-[14px] font-semibold text-[14px] hover:opacity-90 cursor-pointer">
                   <Download size={15} />Export
                 </button>
                 <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold"
+                  onClick={() => withLogoutLoading(handleLogout)}
+                  disabled={logoutLoading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold cursor-pointer disabled:opacity-50"
                 >
-                  <LogOut size={16} />
-                  Logout
+                  {logoutLoading ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <LogOut size={16} />
+                  )}
+                  {logoutLoading ? "Logging out..." : "Logout"}
                 </button>
               </div>
             </div>
@@ -272,7 +281,7 @@ export default function ReportsPage() {
                             <div className="flex-1">
                               <div className="flex justify-between mb-1">
                                 <span className="text-[13px] font-medium text-slate-700">{product.name}</span>
-                                <span className="text-[13px] font-semibold text-[#702bf0]">{formatCurrency(product.revenue)}</span>
+                                <span className="text-[13px] font-semibold text-[#702bf0]">{fc(product.revenue)}</span>
                               </div>
                               <div className="w-full bg-slate-100 rounded-full h-1.5">
                                 <div className="bg-gradient-to-r from-[#702bf0] to-[#511ae8] h-1.5 rounded-full"
@@ -300,7 +309,7 @@ export default function ReportsPage() {
                                 <span className="text-[13px] font-medium text-slate-600 capitalize">{item.method}</span>
                               </div>
                               <div className="flex items-center gap-3">
-                                <span className="text-[13px] font-semibold text-slate-700">{formatCurrency(item.amount)}</span>
+                                <span className="text-[13px] font-semibold text-slate-700">{fc(item.amount)}</span>
                                 <span className="text-[12px] text-slate-400 w-8 text-right">{item.percent}%</span>
                               </div>
                             </div>
@@ -314,7 +323,7 @@ export default function ReportsPage() {
                           <span className="text-[13px] font-semibold text-slate-500">Total</span>
                           <div className="flex items-center gap-2">
                             <CreditCard size={14} className="text-slate-400" />
-                            <span className="text-[14px] font-bold text-[#1e1b4b]">{formatCurrency(data?.totalRevenue ?? 0)}</span>
+                            <span className="text-[14px] font-bold text-[#1e1b4b]">{fc(data?.totalRevenue ?? 0)}</span>
                           </div>
                         </div>
                       </div>

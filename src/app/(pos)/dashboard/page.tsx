@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useUser } from "@/lib/hooks/useUser";
+import { useLoadingButton } from "@/lib/hooks/useLoadingButton";
 import {
   LayoutGrid,
   Users,
@@ -32,8 +33,7 @@ import {
 } from "recharts";
 import clsx from "clsx";
 import { useDashboardStats } from "@/lib/hooks/useDashboard";
-import { formatCurrency } from "@/lib/utils/currency";
-import { useAppSettings } from "@/components/providers/settings-provider";
+import { useAppSettings, useCurrency } from "@/components/providers/settings-provider";
 
 // --- Data ---
 const lineData = [
@@ -125,6 +125,8 @@ const CustomBarTooltip = ({ active, payload }: { active?: boolean; payload?: Arr
 // --- Page Layout ---
 
 export default function AppDashboard() {
+  const { loading: logoutLoading, withLoading: withLogoutLoading } = useLoadingButton();
+  const fc = useCurrency();
   const appSettings = useAppSettings();
   const formatSalesTooltip = (value: unknown) => [`${appSettings.currency} ${Number(value ?? 0).toLocaleString("en-PK")}`, "Sales"];
 
@@ -183,7 +185,7 @@ export default function AppDashboard() {
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-semibold text-slate-700 truncate">Admin</p>
+                <p className="text-[12px] font-semibold text-slate-700 truncate">{appSettings.storeName}</p>
                 <p className="text-[11px] text-slate-400 truncate">{user?.email ?? ""}</p>
               </div>
             </div>
@@ -195,12 +197,17 @@ export default function AppDashboard() {
           <div className="px-[44px] pt-[44px] pb-[34px] shrink-0 flex items-center justify-between">
             <h1 className="text-[32px] font-bold text-[#1e1b4b] tracking-tight">Dashboard</h1>
             <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold"
-            >
-              <LogOut size={16} />
-              Logout
-            </button>
+                  onClick={() => withLogoutLoading(handleLogout)}
+                  disabled={logoutLoading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  {logoutLoading ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <LogOut size={16} />
+                  )}
+                  {logoutLoading ? "Logging out..." : "Logout"}
+                </button>
           </div>
 
           <div className="flex-1 overflow-y-auto scrollbar-hide bg-[#f0f4fc] rounded-tl-[2.5rem] px-[44px] py-[34px]">
@@ -218,7 +225,7 @@ export default function AppDashboard() {
               icon={CircleDollarSign}
               iconColor="text-[#702bf0]"
               title="Today's Revenue"
-              value={statsLoading ? "..." : formatCurrency(stats?.todayRevenue ?? 0)}
+              value={statsLoading ? "..." : fc(stats?.todayRevenue ?? 0)}
               trend="vs yesterday"
               trendPositive={true}
             />
@@ -275,7 +282,7 @@ export default function AppDashboard() {
                         <p className="text-[12px] text-slate-400 capitalize">{tx.payment_method.replace("_", " ")}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[13px] font-bold text-[#702bf0]">{formatCurrency(Number(tx.total))}</p>
+                        <p className="text-[13px] font-bold text-[#702bf0]">{fc(Number(tx.total))}</p>
                         <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full capitalize">{tx.status}</span>
                       </div>
                     </div>

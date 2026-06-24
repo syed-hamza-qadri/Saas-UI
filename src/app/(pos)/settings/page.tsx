@@ -5,8 +5,10 @@ import { useSettings, useSaveAllSettings } from "@/lib/hooks/useSettings";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAppSettings, useCurrency } from "@/components/providers/settings-provider";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/lib/hooks/useUser";
+import { useLoadingButton } from "@/lib/hooks/useLoadingButton";
 import {
   LayoutGrid, ShoppingCart, Receipt, Package, Users,
   BarChart2, Settings, ChevronRight, Store, Receipt as ReceiptIcon,
@@ -53,7 +55,7 @@ const SettingRow = ({ label, description, children }: { label: string; descripti
 const Toggle = ({ enabled, onChange }: { enabled: boolean; onChange: () => void }) => (
   <button onClick={onChange}
     className={clsx("relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-      enabled ? "bg-[#702bf0]" : "bg-slate-200"
+      enabled ? "bg-[#702bf0] cursor-pointer" : "bg-slate-200 cursor-pointer"
     )}>
     <span className={clsx("inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm",
       enabled ? "translate-x-6" : "translate-x-1"
@@ -87,6 +89,8 @@ interface AllSettings {
   low_stock_alert: boolean;
   daily_summary: boolean;
   order_notification: boolean;
+  wallet_name: string;
+  wallet_number: string;
 }
 
 const DEFAULTS: AllSettings = {
@@ -115,9 +119,14 @@ const DEFAULTS: AllSettings = {
   low_stock_alert: true,
   daily_summary: true,
   order_notification: false,
+  wallet_name: "",
+  wallet_number: "",
 };
 
 export default function SettingsPage() {
+  const { loading: logoutLoading, withLoading: withLogoutLoading } = useLoadingButton();
+  const appSettings = useAppSettings();
+  const fc = useCurrency();
   const [activeTab, setActiveTab] = useState<SettingsTab>("store");
   const [s, setS] = useState<AllSettings>(DEFAULTS);
   const [initialized, setInitialized] = useState(false);
@@ -162,6 +171,8 @@ export default function SettingsPage() {
       low_stock_alert: savedSettings.low_stock_alert !== "false",
       daily_summary: savedSettings.daily_summary !== "false",
       order_notification: savedSettings.order_notification === "true",
+      wallet_name: savedSettings.wallet_name ?? DEFAULTS.wallet_name,
+      wallet_number: savedSettings.wallet_number ?? DEFAULTS.wallet_number,
     });
     setInitialized(true);
   }, [savedSettings, initialized]);
@@ -193,7 +204,7 @@ export default function SettingsPage() {
   const SaveBtn = () => (
     <div className="mt-6 pt-4 border-t border-slate-100">
       <button onClick={handleSave} disabled={saveAllSettings.isPending || settingsLoading}
-        className="bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white px-6 py-2.5 rounded-[14px] font-semibold text-[14px] hover:opacity-90 transition-opacity disabled:opacity-50">
+        className="bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white px-6 py-2.5 rounded-[14px] font-semibold text-[14px] hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer">
         {saveAllSettings.isPending ? "Saving..." : "Save Changes"}
       </button>
     </div>
@@ -222,7 +233,7 @@ export default function SettingsPage() {
                 <span className="text-white text-[12px] font-bold">{user?.email?.charAt(0).toUpperCase() ?? "A"}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-semibold text-slate-700 truncate">Admin</p>
+                <p className="text-[12px] font-semibold text-slate-700 truncate">{appSettings.storeName}</p>
                 <p className="text-[11px] text-slate-400 truncate">{user?.email ?? ""}</p>
               </div>
             </div>
@@ -233,10 +244,18 @@ export default function SettingsPage() {
           <div className="px-[44px] pt-[44px] pb-[34px] shrink-0">
             <div className="flex items-center justify-between">
               <h1 className="text-[32px] font-bold text-[#1e1b4b] tracking-tight">Settings</h1>
-              <button onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold">
-                <LogOut size={16} />Logout
-              </button>
+              <button
+                  onClick={() => withLogoutLoading(handleLogout)}
+                  disabled={logoutLoading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-[12px] text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all text-[13px] font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  {logoutLoading ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <LogOut size={16} />
+                  )}
+                  {logoutLoading ? "Logging out..." : "Logout"}
+                </button>
             </div>
           </div>
 
@@ -252,7 +271,7 @@ export default function SettingsPage() {
                     {SETTINGS_TABS.map((tab) => (
                       <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                         className={clsx("w-full flex items-center gap-3 px-4 py-3 rounded-[14px] text-left transition-all mb-1 last:mb-0",
-                          activeTab === tab.id ? "bg-[#702bf0] text-white" : "text-slate-500 hover:bg-slate-50"
+                          activeTab === tab.id ? "bg-[#702bf0] text-white cursor-pointer" : "text-slate-500 hover:bg-slate-50 cursor-pointer"
                         )}>
                         <tab.icon size={17} />
                         <span className="text-[13px] font-semibold">{tab.label}</span>
@@ -289,6 +308,8 @@ export default function SettingsPage() {
                       <SettingRow label="Cash" description="Accept cash payments">{tog("cash_payment")}</SettingRow>
                       <SettingRow label="Card" description="Accept debit/credit card payments">{tog("card_payment")}</SettingRow>
                       <SettingRow label="Bank Transfer" description="Accept bank transfer payments">{tog("bank_transfer")}</SettingRow>
+                      <SettingRow label="Wallet / Bank Name" description="e.g. JazzCash, Easypaisa, HBL">{inp("wallet_name")}</SettingRow>
+                      <SettingRow label="Wallet / Account Number" description="Optional — shown to cashier during bank transfer">{inp("wallet_number")}</SettingRow>
                       <SettingRow label="GST Rate (%)" description="Applied to all taxable items">{inp("tax_rate")}</SettingRow>
                       <SettingRow label="Max Cashier Discount (%)" description="Maximum discount cashier can apply">{inp("max_cashier_discount")}</SettingRow>
                       <SaveBtn />

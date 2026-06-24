@@ -8,6 +8,7 @@ const supabase = createClient();
 export const useProducts = () => {
   return useQuery({
     queryKey: ["products"],
+    staleTime: 30 * 1000,
     queryFn: async (): Promise<Product[]> => {
       const { data, error } = await supabase
         .from("products")
@@ -22,6 +23,7 @@ export const useProducts = () => {
 export const useActiveProducts = () => {
   return useQuery({
     queryKey: ["products", "active"],
+    staleTime: 30 * 1000,
     queryFn: async (): Promise<Product[]> => {
       const { data, error } = await supabase
         .from("products")

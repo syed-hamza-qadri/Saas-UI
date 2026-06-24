@@ -14,6 +14,8 @@ interface AppSettings {
   showGstOnReceipt: boolean;
   receiptFooter: string;
   lowStockThreshold: number;
+  walletName: string;
+  walletNumber: string;
 }
 
 const SETTING_DEFAULTS: AppSettings = {
@@ -27,11 +29,19 @@ const SETTING_DEFAULTS: AppSettings = {
   showGstOnReceipt: true,
   receiptFooter: "Thank you for your purchase!",
   lowStockThreshold: 10,
+  walletName: "",
+  walletNumber: "",
 };
 
 const SettingsContext = createContext<AppSettings>(SETTING_DEFAULTS);
 
 export const useAppSettings = () => useContext(SettingsContext);
+
+import { formatCurrency } from "@/lib/utils/currency";
+export const useCurrency = () => {
+  const { currency } = useAppSettings();
+  return (amount: number) => formatCurrency(amount, currency);
+};
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const { data: raw } = useSettings();
@@ -47,6 +57,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     showGstOnReceipt: raw.show_gst_on_receipt !== "false",
     receiptFooter: raw.receipt_footer ?? SETTING_DEFAULTS.receiptFooter,
     lowStockThreshold: raw.low_stock_threshold ? Number(raw.low_stock_threshold) : SETTING_DEFAULTS.lowStockThreshold,
+    walletName: raw.wallet_name ?? "",
+    walletNumber: raw.wallet_number ?? "",
   } : SETTING_DEFAULTS;
 
   return (
