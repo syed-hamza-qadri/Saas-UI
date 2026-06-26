@@ -16,7 +16,14 @@ A production-ready Point of Sale web application.
 3. Run `npx supabase login`
 4. Run `npx supabase link` and select the new project
 5. Run `npx supabase db push` to create all tables
-6. Deploy to Vercel with the same env variables
+6. Go to Supabase Dashboard → SQL Editor and run this to create your admin user:
+```sql
+INSERT INTO public.users (auth_id, name, email, role, active)
+SELECT id, 'Admin', email, 'admin', true
+FROM auth.users
+WHERE email = 'your-admin-email@example.com';
+```
+7. Deploy to Vercel with the same env variables
 
 ## Development
 
