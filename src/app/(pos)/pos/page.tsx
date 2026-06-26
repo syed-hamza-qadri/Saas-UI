@@ -15,6 +15,7 @@ import {
   Settings, Barcode, Tag,
 } from "lucide-react";
 import clsx from "clsx";
+import toast from "react-hot-toast";
 import { calculateSubtotal, calculateTotal } from "@/lib/utils/tax";
 import { useAppSettings, useCurrency } from "@/components/providers/settings-provider";
 import type { CartItem } from "@/types";
@@ -40,7 +41,7 @@ const SidebarItem = ({ icon: Icon, label, active = false, href }: { icon: Lucide
 
 const PaymentModal = ({
   total, onClose, onConfirm, appSettings, isPending
-}: { total: number; onClose: () => void; onConfirm: (method: string) => void; appSettings: { cashPayment: boolean; cardPayment: boolean; bankTransfer: boolean; walletName: string; walletNumber: string }, isPending?: boolean }) => {
+}: { total: number; onClose: () => void; onConfirm: (method: string) => void; appSettings: { cashPayment: boolean; cardPayment: boolean; bankTransfer: boolean; walletName: string; walletNumber: string; currency: string; }, isPending?: boolean }) => {
   const fc = useCurrency();
   const availableMethods = [
     { id: "cash", label: "Cash", enabled: appSettings.cashPayment },
@@ -98,7 +99,7 @@ const PaymentModal = ({
 )}
         {method === "cash" && (
           <div className="mb-6">
-            <label className="text-slate-500 text-sm font-medium mb-2 block">Cash Received (PKR)</label>
+            <label className="text-slate-500 text-sm font-medium mb-2 block">Cash Received ({appSettings.currency})</label>
             <input type="number" min={0} value={cashReceived} onChange={(e) => setCashReceived(e.target.value)}
               placeholder="Enter amount"
               className="w-full border-2 border-slate-200 rounded-[12px] px-4 py-3 text-[16px] font-semibold focus:outline-none focus:border-[#702bf0]" />
@@ -111,7 +112,7 @@ const PaymentModal = ({
           </div>
         )}
         <button onClick={() => onConfirm(method)}
-          disabled={(method === "cash" && Number(cashReceived) < total) || isPending}
+          disabled={availableMethods.length === 0 || (method === "cash" && Number(cashReceived) < total) || isPending}
           className="w-full bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white py-4 rounded-[16px] font-bold text-[16px] disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity cursor-pointer">
           {isPending ? (
             <div className="flex items-center justify-center gap-2">
@@ -222,6 +223,10 @@ export default function POSTerminal() {
     setCartItems((prev) => {
       const existing = prev.find((i) => i.product_id === product.id);
       if (existing) {
+        if (existing.quantity >= product.stock_qty) {
+          toast.error(`Only ${product.stock_qty} in stock`);
+          return prev;
+        }
         return prev.map((i) => i.product_id === product.id
           ? { ...i, quantity: i.quantity + 1, subtotal: calculateSubtotal(i.price, i.quantity + 1) } : i);
       }
@@ -231,6 +236,11 @@ export default function POSTerminal() {
 
   const updateQty = (product_id: string, qty: number) => {
     if (qty <= 0) { setCartItems((prev) => prev.filter((i) => i.product_id !== product_id)); return; }
+    const product = products.find((p) => p.id === product_id);
+    if (product && qty > product.stock_qty) {
+      toast.error(`Only ${product.stock_qty} in stock`);
+      return;
+    }
     setCartItems((prev) => prev.map((i) => i.product_id === product_id ? { ...i, quantity: qty, subtotal: calculateSubtotal(i.price, qty) } : i));
   };
 
@@ -250,11 +260,9 @@ export default function POSTerminal() {
   const total = calculateTotal(subtotal, tax, discountAmount);
 
   const handleConfirmPayment = async (method: string) => {
-    const orderNum = `ORD-${Date.now().toString().slice(-6)}`;
     try {
-      await createOrder.mutateAsync({
+      const orderId = await createOrder.mutateAsync({
         order: {
-          order_number: orderNum,
           customer_id: selectedCustomer?.id,
           subtotal,
           tax,
@@ -272,8 +280,14 @@ export default function POSTerminal() {
           subtotal: item.subtotal,
         })),
       });
+      const supabase = createClient();
+      const { data: orderData } = await supabase
+        .from("orders")
+        .select("order_number")
+        .eq("id", orderId)
+        .single();
       setPaymentMethod(method);
-      setOrderNumber(orderNum);
+      setOrderNumber(orderData?.order_number ?? String(orderId).slice(-6));
       setShowPayment(false);
       setShowReceipt(true);
     } catch {

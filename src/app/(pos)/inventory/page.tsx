@@ -128,8 +128,11 @@ export default function InventoryPage() {
   };
 
   const handleDelete = async (id: string) => {
-    await deleteProduct.mutateAsync(id);
-    setDeleteConfirm(null);
+    try {
+      await deleteProduct.mutateAsync(id);
+    } finally {
+      setDeleteConfirm(null);
+    }
   };
 
   return (

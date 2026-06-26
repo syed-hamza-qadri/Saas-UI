@@ -288,7 +288,7 @@ export default function CustomersPage() {
             <p className="text-[13px] text-slate-400 text-center mb-6">This action cannot be undone.</p>
             <div className="flex gap-3">
               <button onClick={() => setDeleteConfirm(null)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm">Cancel</button>
-              <button onClick={async () => { await deleteCustomer.mutateAsync(deleteConfirm); setDeleteConfirm(null); }}
+              <button onClick={async () => { try { await deleteCustomer.mutateAsync(deleteConfirm); } finally { setDeleteConfirm(null); } }}
                 disabled={deleteCustomer.isPending}
                 className="flex-1 bg-red-500 text-white py-3 rounded-[14px] font-bold text-sm hover:bg-red-600 disabled:opacity-50 cursor-pointer">
                 {deleteCustomer.isPending ? "Deleting..." : "Delete"}

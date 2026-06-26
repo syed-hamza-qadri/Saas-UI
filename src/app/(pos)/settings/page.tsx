@@ -5,7 +5,7 @@ import { useSettings, useSaveAllSettings } from "@/lib/hooks/useSettings";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAppSettings, useCurrency } from "@/components/providers/settings-provider";
+import { useAppSettings } from "@/components/providers/settings-provider";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/lib/hooks/useUser";
 import { useLoadingButton } from "@/lib/hooks/useLoadingButton";
@@ -126,7 +126,7 @@ const DEFAULTS: AllSettings = {
 export default function SettingsPage() {
   const { loading: logoutLoading, withLoading: withLogoutLoading } = useLoadingButton();
   const appSettings = useAppSettings();
-  const fc = useCurrency();
+
   const [activeTab, setActiveTab] = useState<SettingsTab>("store");
   const [s, setS] = useState<AllSettings>(DEFAULTS);
   const [initialized, setInitialized] = useState(false);

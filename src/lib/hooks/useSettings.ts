@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
+import { getFriendlyError } from "@/lib/utils/errors";
 
 const supabase = createClient();
 
@@ -33,7 +34,7 @@ export const useSaveSetting = () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getFriendlyError(error));
     },
   });
 };
@@ -57,7 +58,7 @@ export const useSaveAllSettings = () => {
       toast.success("Settings saved successfully");
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getFriendlyError(error));
     },
   });
 };

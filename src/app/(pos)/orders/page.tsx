@@ -281,7 +281,7 @@ export default function OrdersPage() {
                 </div>
               )}
               <div className="flex justify-between text-sm text-slate-500">
-                <span>GST (17%)</span><span>{fc(Number(viewOrder.tax))}</span>
+                <span>GST ({Math.round(appSettings.taxRate * 100)}%)</span><span>{fc(Number(viewOrder.tax))}</span>
               </div>
               <div className="flex justify-between font-bold text-[#1e1b4b] text-[15px] pt-2 border-t border-slate-100">
                 <span>Total</span><span>{fc(Number(viewOrder.total))}</span>
@@ -327,8 +327,11 @@ export default function OrdersPage() {
               </button>
               <button
                 onClick={async () => {
-                  await updateStatus.mutateAsync({ id: actionConfirm.id, status: actionConfirm.action });
-                  setActionConfirm(null);
+                  try {
+                    await updateStatus.mutateAsync({ id: actionConfirm.id, status: actionConfirm.action });
+                  } finally {
+                    setActionConfirm(null);
+                  }
                 }}
                 disabled={updateStatus.isPending}
                 className={clsx("flex-1 text-white py-3 rounded-[14px] font-bold text-sm disabled:opacity-50",

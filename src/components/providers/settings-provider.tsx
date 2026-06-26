@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useMemo } from "react";
 import { useSettings } from "@/lib/hooks/useSettings";
 
 interface AppSettings {
@@ -16,6 +16,7 @@ interface AppSettings {
   lowStockThreshold: number;
   walletName: string;
   walletNumber: string;
+  sessionTimeout: number;
 }
 
 const SETTING_DEFAULTS: AppSettings = {
@@ -31,6 +32,7 @@ const SETTING_DEFAULTS: AppSettings = {
   lowStockThreshold: 10,
   walletName: "",
   walletNumber: "",
+  sessionTimeout: 30,
 };
 
 const SettingsContext = createContext<AppSettings>(SETTING_DEFAULTS);
@@ -46,7 +48,7 @@ export const useCurrency = () => {
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const { data: raw } = useSettings();
 
-  const settings: AppSettings = raw ? {
+  const settings = useMemo<AppSettings>(() => raw ? {
     taxRate: raw.tax_rate ? Number(raw.tax_rate) / 100 : SETTING_DEFAULTS.taxRate,
     maxCashierDiscount: raw.max_cashier_discount ? Number(raw.max_cashier_discount) / 100 : SETTING_DEFAULTS.maxCashierDiscount,
     currency: raw.currency ?? SETTING_DEFAULTS.currency,
@@ -59,7 +61,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     lowStockThreshold: raw.low_stock_threshold ? Number(raw.low_stock_threshold) : SETTING_DEFAULTS.lowStockThreshold,
     walletName: raw.wallet_name ?? "",
     walletNumber: raw.wallet_number ?? "",
-  } : SETTING_DEFAULTS;
+    sessionTimeout: raw.session_timeout ? Number(raw.session_timeout) : SETTING_DEFAULTS.sessionTimeout,
+  } : SETTING_DEFAULTS, [raw]);
 
   return (
     <SettingsContext.Provider value={settings}>

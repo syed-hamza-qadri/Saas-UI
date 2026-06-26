@@ -1,5 +1,10 @@
 import React from "react";
+import { SessionGuard } from "@/components/providers/session-guard";
 
 export default function PosLayout({ children }: { children: React.ReactNode }) {
-  return <div className="min-h-screen">{children}</div>;
+  return (
+    <SessionGuard>
+      {children}
+    </SessionGuard>
+  );
 }

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { Product } from "@/types";
 import toast from "react-hot-toast";
+import { getFriendlyError } from "@/lib/utils/errors";
 
 const supabase = createClient();
 
@@ -53,7 +54,7 @@ export const useAddProduct = () => {
       toast.success("Product added successfully");
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getFriendlyError(error));
     },
   });
 };
@@ -76,7 +77,7 @@ export const useUpdateProduct = () => {
       toast.success("Product updated successfully");
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getFriendlyError(error));
     },
   });
 };
@@ -96,7 +97,7 @@ export const useDeleteProduct = () => {
       toast.success("Product deleted successfully");
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getFriendlyError(error));
     },
   });
 };
@@ -116,7 +117,7 @@ export const useToggleProductVisibility = () => {
       toast.success("Product visibility updated");
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getFriendlyError(error));
     },
   });
 };

@@ -1,20 +1,33 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# POS System
 
-# Run and deploy your AI Studio app
+A production-ready Point of Sale web application.
 
-This contains everything you need to run your app locally.
+## Tech Stack
+- Next.js 16 (App Router)
+- TypeScript
+- Supabase (PostgreSQL + Auth + RLS)
+- TanStack Query v5
+- Tailwind CSS v4
 
-View your app in AI Studio: https://ai.studio/apps/95ca7164-a5fa-482f-9b1b-4b881f35b020
+## Setup for New Client
 
-## Run Locally
+1. Create a new Supabase project
+2. Copy `.env.example` to `.env.local` and fill in values
+3. Run `npx supabase login`
+4. Run `npx supabase link` and select the new project
+5. Run `npx supabase db push` to create all tables
+6. Deploy to Vercel with the same env variables
 
-**Prerequisites:**  Node.js
+## Development
 
+```bash
+npm install
+npm run dev
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Scripts
+
+- `npm run dev` — start development server
+- `npm run build` — production build
+- `npm run typecheck` — TypeScript check
+- `npm run lint` — Biome lint check

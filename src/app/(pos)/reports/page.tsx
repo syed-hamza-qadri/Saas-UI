@@ -239,14 +239,14 @@ export default function ReportsPage() {
 
                 <div className="grid grid-cols-2 gap-4 mb-6">
                   <div className="bg-white rounded-[20px] p-5 shadow-sm border border-slate-100">
-                    <h3 className="text-[15px] font-bold text-[#1e1b4b] mb-4">Daily Revenue (PKR)</h3>
+                    <h3 className="text-[15px] font-bold text-[#1e1b4b] mb-4">Daily Revenue ({appSettings.currency})</h3>
                     <div className="w-full" style={{ minHeight: 0, height: 200 }}>
                       <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <BarChart data={data?.dailyChartData ?? []} barSize={24}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                           <XAxis dataKey="day" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                           <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v / 1000}k`} />
-                          <Tooltip formatter={(value: unknown) => [`PKR ${Number(value ?? 0).toLocaleString("en-PK")}`, "Revenue"]} />
+                          <Tooltip formatter={(value: unknown) => [`${appSettings.currency} ${Number(value ?? 0).toLocaleString("en-PK")}`, "Revenue"]} />
                           <Bar dataKey="revenue" fill="#702bf0" radius={[6, 6, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
@@ -260,7 +260,7 @@ export default function ReportsPage() {
                           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                           <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                           <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v / 1000}k`} />
-                          <Tooltip formatter={(value: unknown) => [`PKR ${Number(value ?? 0).toLocaleString("en-PK")}`, "Revenue"]} />
+                          <Tooltip formatter={(value: unknown) => [`${appSettings.currency} ${Number(value ?? 0).toLocaleString("en-PK")}`, "Revenue"]} />
                           <Line type="monotone" dataKey="revenue" stroke="#702bf0" strokeWidth={2.5} dot={{ r: 4, fill: "white", stroke: "#702bf0", strokeWidth: 2 }} />
                         </LineChart>
                       </ResponsiveContainer>

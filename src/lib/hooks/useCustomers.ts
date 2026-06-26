@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { Customer } from "@/types";
 import toast from "react-hot-toast";
+import { getFriendlyError } from "@/lib/utils/errors";
 
 const supabase = createClient();
 
@@ -37,7 +38,7 @@ export const useAddCustomer = () => {
       toast.success("Customer added successfully");
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getFriendlyError(error));
     },
   });
 };
@@ -60,7 +61,7 @@ export const useUpdateCustomer = () => {
       toast.success("Customer updated successfully");
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getFriendlyError(error));
     },
   });
 };
@@ -80,7 +81,7 @@ export const useDeleteCustomer = () => {
       toast.success("Customer deleted successfully");
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getFriendlyError(error));
     },
   });
 };
