@@ -29,7 +29,6 @@ export const useCreateOrder = () => {
       items,
     }: {
       order: {
-        order_number?: string;
         customer_id?: string;
         subtotal: number;
         tax: number;
@@ -48,15 +47,33 @@ export const useCreateOrder = () => {
         subtotal: number;
       }[];
     }) => {
+      const orderPayload = {
+        subtotal: order.subtotal,
+        tax: order.tax,
+        discount: order.discount,
+        total: order.total,
+        status: order.status,
+        payment_method: order.payment_method,
+        ...(order.customer_id ? { customer_id: order.customer_id } : {}),
+        ...(order.notes ? { notes: order.notes } : {}),
+      };
+
+      const itemsPayload = items.map((item) => ({
+        product_id: item.product_id,
+        product_name: item.product_name,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount: item.discount,
+        subtotal: item.subtotal,
+      }));
+
       const { data, error } = await supabase.rpc("create_order_atomic", {
-        p_order: JSON.stringify({
-          ...order,
-          order_number: undefined,
-        }),
-        p_items: JSON.stringify(items),
+        p_order: orderPayload,
+        p_items: itemsPayload,
       });
-      if (error) throw error;
-      return data;
+
+      if (error) throw new Error(error.message);
+      return data as string;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
