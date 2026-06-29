@@ -9,10 +9,12 @@ import { useAppSettings } from "@/components/providers/settings-provider";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/lib/hooks/useUser";
 import { useLoadingButton } from "@/lib/hooks/useLoadingButton";
+import { useCategories, useAddCategory, useUpdateCategory, useDeleteCategory } from "@/lib/hooks/useCategories";
 import {
   LayoutGrid, ShoppingCart, Receipt, Package, Users,
   BarChart2, Settings, ChevronRight, Store, Receipt as ReceiptIcon,
   CreditCard, Shield, Printer, Bell, LogOut,
+  Trash2, Edit2, Plus, Tag,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -31,7 +33,7 @@ const SidebarItem = ({ icon: Icon, label, active = false, href }: { icon: Lucide
   </Link>
 );
 
-type SettingsTab = "store" | "receipt" | "payment" | "security" | "printer" | "notifications";
+type SettingsTab = "store" | "receipt" | "payment" | "security" | "printer" | "notifications" | "categories";
 
 const SETTINGS_TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "store", label: "Store Info", icon: Store },
@@ -40,6 +42,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "security", label: "Security", icon: Shield },
   { id: "printer", label: "Printer", icon: Printer },
   { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "categories", label: "Categories", icon: Tag },
 ];
 
 const SettingRow = ({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) => (
@@ -134,6 +137,14 @@ export default function SettingsPage() {
   const { data: user } = useUser();
   const { data: savedSettings, isLoading: settingsLoading } = useSettings();
   const saveAllSettings = useSaveAllSettings();
+
+  const { data: categories = [], isLoading: categoriesLoading } = useCategories();
+  const addCategory = useAddCategory();
+  const updateCategory = useUpdateCategory();
+  const deleteCategory = useDeleteCategory();
+  const [catForm, setCatForm] = useState({ name: "", color: "#702bf0" });
+  const [editCatId, setEditCatId] = useState<string | null>(null);
+  const [deleteCatConfirm, setDeleteCatConfirm] = useState<string | null>(null);
 
   const router = useRouter();
   const handleLogout = async () => {
@@ -332,6 +343,139 @@ export default function SettingsPage() {
                       <SettingRow label="Auto Cut Paper" description="Cut paper after printing receipt">{tog("auto_cut")}</SettingRow>
                       <SettingRow label="Print Logo" description="Print store logo on receipt">{tog("print_logo")}</SettingRow>
                       <SaveBtn />
+                    </div>
+                  )}
+                  {activeTab === "categories" && (
+                    <div>
+                      <h2 className="text-[16px] font-bold text-[#1e1b4b] mb-4">Category Management</h2>
+
+                      {/* Add/Edit Form */}
+                      <div className="bg-[#f8f7ff] rounded-[16px] p-4 mb-6">
+                        <p className="text-[13px] font-semibold text-slate-600 mb-3">
+                          {editCatId ? "Edit Category" : "Add New Category"}
+                        </p>
+                        <div className="flex gap-3 items-end">
+                          <div className="flex-1">
+                            <label className="text-[12px] font-semibold text-slate-500 mb-1 block">Category Name</label>
+                            <input
+                              type="text"
+                              value={catForm.name}
+                              onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
+                              placeholder="e.g. Electronics"
+                              className="w-full border border-slate-200 rounded-[10px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#702bf0] bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[12px] font-semibold text-slate-500 mb-1 block">Color</label>
+                            <input
+                              type="color"
+                              value={catForm.color}
+                              onChange={(e) => setCatForm({ ...catForm, color: e.target.value })}
+                              className="w-10 h-10 rounded-[8px] border border-slate-200 cursor-pointer"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={async () => {
+                                if (!catForm.name.trim()) return;
+                                try {
+                                  if (editCatId) {
+                                    await updateCategory.mutateAsync({ id: editCatId, name: catForm.name, color: catForm.color });
+                                  } else {
+                                    await addCategory.mutateAsync({ name: catForm.name, color: catForm.color });
+                                  }
+                                  setCatForm({ name: "", color: "#702bf0" });
+                                  setEditCatId(null);
+                                } catch {}
+                              }}
+                              disabled={addCategory.isPending || updateCategory.isPending || !catForm.name.trim()}
+                              className="flex items-center gap-2 bg-gradient-to-r from-[#702bf0] to-[#511ae8] text-white px-4 py-2 rounded-[10px] font-semibold text-[13px] hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                            >
+                              <Plus size={14} />
+                              {editCatId ? "Update" : "Add"}
+                            </button>
+                            {editCatId && (
+                              <button
+                                onClick={() => { setEditCatId(null); setCatForm({ name: "", color: "#702bf0" }); }}
+                                className="px-4 py-2 rounded-[10px] bg-slate-100 text-slate-600 font-semibold text-[13px] hover:bg-slate-200 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Categories List */}
+                      {categoriesLoading ? (
+                        <div className="flex justify-center py-8">
+                          <div className="w-6 h-6 border-2 border-[#702bf0] border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      ) : categories.length === 0 ? (
+                        <div className="text-center py-8 text-slate-300">
+                          <Tag size={32} className="mx-auto mb-2 opacity-30" />
+                          <p className="text-sm">No categories yet. Add your first one above.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {categories.map((cat) => (
+                            <div key={cat.id} className="flex items-center justify-between bg-white border border-slate-100 rounded-[12px] px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                                <span className="text-[13px] font-semibold text-slate-700">{cat.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => { setEditCatId(cat.id); setCatForm({ name: cat.name, color: cat.color }); }}
+                                  className="w-8 h-8 rounded-[8px] bg-[#f0f4fc] flex items-center justify-center hover:bg-[#e8e2ff] transition-colors cursor-pointer"
+                                >
+                                  <Edit2 size={13} className="text-[#702bf0]" />
+                                </button>
+                                <button
+                                  onClick={() => setDeleteCatConfirm(cat.id)}
+                                  className="w-8 h-8 rounded-[8px] bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors cursor-pointer"
+                                >
+                                  <Trash2 size={13} className="text-red-500" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Delete Confirmation */}
+                      {deleteCatConfirm && (
+                        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+                          <div className="bg-white rounded-[24px] p-8 w-full max-w-sm shadow-2xl">
+                            <div className="flex items-center justify-center w-14 h-14 rounded-full bg-red-50 mx-auto mb-4">
+                              <Trash2 size={24} className="text-red-500" />
+                            </div>
+                            <h2 className="text-[18px] font-bold text-[#1e1b4b] text-center mb-2">Delete Category?</h2>
+                            <p className="text-[13px] text-slate-400 text-center mb-6">Products in this category will become uncategorized.</p>
+                            <div className="flex gap-3">
+                              <button
+                                onClick={() => setDeleteCatConfirm(null)}
+                                className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-[14px] font-bold text-sm hover:bg-slate-200 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await deleteCategory.mutateAsync(deleteCatConfirm);
+                                  } finally {
+                                    setDeleteCatConfirm(null);
+                                  }
+                                }}
+                                disabled={deleteCategory.isPending}
+                                className="flex-1 bg-red-500 text-white py-3 rounded-[14px] font-bold text-sm hover:bg-red-600 disabled:opacity-50 cursor-pointer"
+                              >
+                                {deleteCategory.isPending ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {activeTab === "notifications" && (
